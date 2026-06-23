@@ -554,7 +554,7 @@
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-const CHUNK_SIZE = 5;      // parallel video reads
+const CONCURRENCY = 16;    // parallel video reads
 const VIDEO_MIME = 'video/';
 
 // ── State ──────────────────────────────────────────────────────────────────
@@ -782,16 +782,17 @@ async function startScan(files, folderName) {
   const fileResults = [];
 
   try {
-    // Process in parallel chunks
-    for (let i = 0; i < files.length; i += CHUNK_SIZE) {
-      if (signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+    // Pool-based concurrency: always keeps CONCURRENCY slots in flight.
+    // Unlike chunking, a slow file never stalls idle slots waiting on the next chunk.
+    let nextIdx = 0;
 
-      const chunk = files.slice(i, i + CHUNK_SIZE);
-      await Promise.all(chunk.map(async file => {
-        if (signal.aborted) return;
+    const runSlot = async () => {
+      while (nextIdx < files.length) {
+        if (signal.aborted) throw new DOMException('Cancelled', 'AbortError');
+        const file = files[nextIdx++]; // JS is single-threaded: no race on nextIdx
 
-        el('scanFile').textContent = file.name;
         const { duration, success } = await getVideoDuration(file);
+        if (signal.aborted) return;   // discard result if cancelled mid-flight
 
         if (!success) failed++;
         fileResults.push({ name: file.name, duration, success });
@@ -802,13 +803,15 @@ async function startScan(files, folderName) {
         const eta     = Math.round((files.length - processed) / rate);
         const pct     = Math.round((processed / files.length) * 100);
 
-        el('progressFill').style.width   = pct + '%';
-        el('scanCount').textContent       = `${processed} / ${files.length} files`;
-        el('scanEta').textContent         = processed < files.length
-          ? `ETA: ${formatEta(eta)}`
-          : '';
-      }));
-    }
+        el('scanFile').textContent     = processed < files.length ? file.name : '';
+        el('progressFill').style.width = pct + '%';
+        el('scanCount').textContent    = `${processed} / ${files.length} files`;
+        el('scanEta').textContent      = processed < files.length
+          ? `ETA: ${formatEta(eta)}` : '';
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, runSlot));
 
     if (signal.aborted) return;
 
