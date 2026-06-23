@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="#0e1016"/>
+
+  <!-- Outer ring -->
+  <circle cx="256" cy="256" r="196" fill="none" stroke="#4b7bec" stroke-width="22"/>
+
+  <!-- Inner ring (hub area) -->
+  <circle cx="256" cy="256" r="76" fill="none" stroke="#4b7bec" stroke-width="22"/>
+
+  <!-- Film sprocket holes — 8 positions on outer ring -->
+  <circle cx="256" cy="60"  r="20" fill="#4b7bec"/>
+  <circle cx="256" cy="452" r="20" fill="#4b7bec"/>
+  <circle cx="60"  cy="256" r="20" fill="#4b7bec"/>
+  <circle cx="452" cy="256" r="20" fill="#4b7bec"/>
+  <circle cx="117" cy="117" r="20" fill="#4b7bec"/>
+  <circle cx="395" cy="117" r="20" fill="#4b7bec"/>
+  <circle cx="117" cy="395" r="20" fill="#4b7bec"/>
+  <circle cx="395" cy="395" r="20" fill="#4b7bec"/>
+
+  <!-- Center hub -->
+  <circle cx="256" cy="256" r="28" fill="#f5c842"/>
+
+  <!-- Clock hand — minute (pointing up) -->
+  <line x1="256" y1="256" x2="256" y2="184"
+        stroke="#f5c842" stroke-width="16" stroke-linecap="round"/>
+
+  <!-- Clock hand — hour (pointing ~2 o'clock) -->
+  <line x1="256" y1="256" x2="312" y2="298"
+        stroke="#f5c842" stroke-width="11" stroke-linecap="round"/>
+</svg>
