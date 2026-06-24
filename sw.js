@@ -1,7 +1,9 @@
-// VRT service worker v7: remove stale cached app shells and pass through network.
-// The app now runs directly from index.html; this worker only cleans old caches.
+// VRT service worker v8-fast: cleanup only, then allow network-first GitHub Pages.
+// The app runs directly from index.html and should not be cached by old VRT workers.
 
 const CACHE_PREFIX = 'vrt-';
+const TARGET_PARAM = 'vrt-fast';
+const TARGET_VERSION = 'v8';
 
 self.addEventListener('install', event => {
   self.skipWaiting();
@@ -16,8 +18,8 @@ self.addEventListener('activate', event => {
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of clients) {
       const url = new URL(client.url);
-      if (url.searchParams.get('vrt-direct') !== 'v7') {
-        url.searchParams.set('vrt-direct', 'v7');
+      if (url.searchParams.get(TARGET_PARAM) !== TARGET_VERSION) {
+        url.searchParams.set(TARGET_PARAM, TARGET_VERSION);
         client.navigate(url.toString()).catch(() => undefined);
       }
     }
