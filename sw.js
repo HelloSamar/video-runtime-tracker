@@ -1,9 +1,7 @@
-// VRT service worker v8-fast: cleanup only, then allow network-first GitHub Pages.
-// The app runs directly from index.html and should not be cached by old VRT workers.
-
+// VRT service worker v9: cleanup only, then allow network-first GitHub Pages.
 const CACHE_PREFIX = 'vrt-';
-const TARGET_PARAM = 'vrt-fast';
-const TARGET_VERSION = 'v8';
+const TARGET_PARAM = 'vrt-mediainfo';
+const TARGET_VERSION = 'v9';
 
 self.addEventListener('install', event => {
   self.skipWaiting();
