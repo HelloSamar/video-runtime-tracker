@@ -1,94 +1,112 @@
 /**
  * VRT — Video Runtime Tracker
- * Service Worker: network-first app shell with a scan hotfix injector.
+ * Service Worker: force-refresh app shell and inject scanner hotfix.
+ *
+ * GitHub Pages + an older service worker can keep serving the old inline
+ * index.html scanner. This version deletes every old VRT cache, takes control
+ * immediately, reloads open clients once, and injects vrt-hotfix.js into every
+ * HTML navigation response.
  */
 
-const CACHE = 'vrt-v4';
+const CACHE = 'vrt-v5';
 const PRECACHE = ['./', './index.html', './worker.js', './manifest.json', './icon.svg', './vrt-hotfix.js'];
-const HOTFIX_TAG = '<script src="./vrt-hotfix.js?v=v4"></script>';
+const HOTFIX_TAG = '<script src="./vrt-hotfix.js?v=v5"></script>';
 
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE)));
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE)
+      .then(cache => cache.addAll(PRECACHE))
+      .catch(() => undefined)
+  );
   self.skipWaiting();
 });
 
-self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
-  );
-  self.clients.claim();
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(key => caches.delete(key)));
+    await caches.open(CACHE).then(cache => cache.addAll(PRECACHE)).catch(() => undefined);
+    await self.clients.claim();
+
+    // Force currently-open GitHub Pages tabs to reload once into the new shell.
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    await Promise.all(clients.map(client => {
+      const url = new URL(client.url);
+      if (url.searchParams.get('vrt-refresh') === 'v5') return undefined;
+      url.searchParams.set('vrt-refresh', 'v5');
+      return client.navigate(url.toString()).catch(() => undefined);
+    }));
+  })());
 });
 
-async function htmlWithHotfix(res) {
-  if (!res) return res;
+function isHTMLRequest(request) {
+  const url = new URL(request.url);
+  return request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html');
+}
 
-  const text = await res.text();
-  const patched = text.includes('vrt-hotfix.js')
-    ? text
-    : text.replace('</body>', `  ${HOTFIX_TAG}\n</body>`);
+async function htmlWithHotfix(response) {
+  if (!response) return response;
 
-  const headers = new Headers(res.headers);
-  headers.set('content-type', 'text/html; charset=utf-8');
-  headers.set('cache-control', 'no-cache');
+  const html = await response.text();
+  const patched = html.includes('vrt-hotfix.js')
+    ? html
+    : html.replace(/<\/body>\s*<\/html>\s*$/i, `  ${HOTFIX_TAG}\n</body>\n</html>`);
 
   return new Response(patched, {
-    status: res.status,
-    statusText: res.statusText,
-    headers,
+    status: response.status,
+    statusText: response.statusText,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'pragma': 'no-cache',
+      'expires': '0',
+    },
   });
 }
 
-async function networkFirst(request, cacheName = CACHE) {
-  const cache = await caches.open(cacheName);
+async function networkFirst(request) {
   try {
-    const res = await fetch(request, { cache: 'no-store' });
-    if (res && res.status === 200 && res.type === 'basic') cache.put(request, res.clone());
-    return res;
+    const response = await fetch(request, { cache: 'no-store' });
+    if (response && response.status === 200 && response.type === 'basic') {
+      const cache = await caches.open(CACHE);
+      await cache.put(request, response.clone());
+    }
+    return response;
   } catch (_) {
+    const cache = await caches.open(CACHE);
     return cache.match(request);
   }
 }
 
-self.addEventListener('fetch', e => {
-  if (new URL(e.request.url).origin !== location.origin) return;
+self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+  if (url.origin !== location.origin) return;
 
-  const url = new URL(e.request.url);
-  const isHTML = e.request.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html');
-  const isHotfix = url.pathname.endsWith('/vrt-hotfix.js');
-  const isWorker = url.pathname.endsWith('/worker.js');
-
-  if (isHTML) {
-    e.respondWith((async () => {
-      const cache = await caches.open(CACHE);
+  if (isHTMLRequest(event.request)) {
+    event.respondWith((async () => {
       try {
-        const network = await fetch(e.request, { cache: 'no-store' });
-        const patched = await htmlWithHotfix(network);
-        cache.put(e.request, patched.clone());
-        return patched;
+        const network = await fetch(event.request, { cache: 'no-store' });
+        return htmlWithHotfix(network);
       } catch (_) {
-        const cached = await cache.match(e.request) || await cache.match('./index.html');
-        return cached ? htmlWithHotfix(cached) : cached;
+        const cache = await caches.open(CACHE);
+        const cached = await cache.match(event.request) || await cache.match('./index.html') || await cache.match('./');
+        return cached ? htmlWithHotfix(cached) : Response.error();
       }
     })());
     return;
   }
 
-  if (isHotfix || isWorker) {
-    e.respondWith(networkFirst(e.request));
+  if (url.pathname.endsWith('/vrt-hotfix.js') || url.pathname.endsWith('/worker.js') || url.pathname.endsWith('/sw.js')) {
+    event.respondWith(networkFirst(event.request));
     return;
   }
 
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(res => {
-        if (!res || res.status !== 200 || res.type !== 'basic') return res;
-        const clone = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
-        return res;
-      });
-    })
+  event.respondWith(
+    caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
+      if (response && response.status === 200 && response.type === 'basic') {
+        caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));
+      }
+      return response;
+    }))
   );
 });
