@@ -8,473 +8,22 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <title>VRT — Video Runtime Tracker</title>
-
   <style>
-    /* ── Tokens ───────────────────────────────────────────────────────────── */
-    :root {
-      --bg:         #0e1016;
-      --surface:    #161b27;
-      --surface-hi: #1d2437;
-      --border:     #28334a;
-      --text:       #dde3f0;
-      --text-dim:   #5e6e8a;
-      --accent:     #4b7bec;
-      --accent-h:   #6890f5;
-      --accent-glo: rgba(75,123,236,.18);
-      --gold:       #f5c842;
-      --gold-bg:    rgba(245,200,66,.09);
-      --gold-border:rgba(245,200,66,.35);
-      --green:      #2ecc8a;
-      --red:        #f04b4b;
-      --red-bg:     rgba(240,75,75,.12);
-      --mono:       ui-monospace,'Cascadia Code','Fira Code',monospace;
-      --sans:       system-ui,-apple-system,'Segoe UI',sans-serif;
-      --r:          12px;
-      --r-sm:       8px;
-      --transition: .18s ease;
-    }
-    @media (prefers-color-scheme: light) {
-      :root {
-        --bg:         #eef1f7;
-        --surface:    #ffffff;
-        --surface-hi: #f4f7ff;
-        --border:     #d0d8eb;
-        --text:       #1c2340;
-        --text-dim:   #7889a8;
-        --accent:     #3a66d9;
-        --accent-h:   #2a54c4;
-        --accent-glo: rgba(58,102,217,.12);
-        --gold:       #a0740a;
-        --gold-bg:    rgba(160,116,10,.07);
-        --gold-border:rgba(160,116,10,.3);
-        --green:      #1a9a63;
-        --red:        #d63030;
-        --red-bg:     rgba(214,48,48,.08);
-      }
-    }
-
-    /* ── Reset & base ─────────────────────────────────────────────────────── */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    html { font-size: 16px; }
-    body {
-      font-family: var(--sans);
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      padding: 32px 16px 80px;
-    }
-
-    /* ── Layout ───────────────────────────────────────────────────────────── */
-    #app {
-      max-width: 660px;
-      margin: 0 auto;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-    }
-
-    /* ── Header ───────────────────────────────────────────────────────────── */
-    header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-    .logo-img {
-      width: 44px;
-      height: 44px;
-      flex-shrink: 0;
-    }
-    header h1 {
-      font-size: 20px;
-      font-weight: 700;
-      letter-spacing: -.3px;
-      line-height: 1.2;
-    }
-    .tagline {
-      font-size: 12px;
-      color: var(--text-dim);
-      margin-top: 2px;
-    }
-    #installBtn {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      color: var(--text-dim);
-      font-size: 12px;
-      padding: 6px 12px;
-      border-radius: var(--r-sm);
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background var(--transition), color var(--transition);
-      flex-shrink: 0;
-    }
-    #installBtn:hover { background: var(--surface-hi); color: var(--text); }
-    #installBtn[hidden] { display: none; }
-
-    /* ── Card ─────────────────────────────────────────────────────────────── */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--r);
-      padding: 24px;
-    }
-    .card-title {
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      color: var(--text-dim);
-      margin-bottom: 16px;
-    }
-
-    /* ── Drop zone ────────────────────────────────────────────────────────── */
-    #dropZone {
-      border: 2px dashed var(--border);
-      border-radius: var(--r);
-      padding: 40px 24px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color var(--transition), background var(--transition), transform var(--transition);
-      background: var(--surface);
-    }
-    #dropZone:hover, #dropZone.drag-active {
-      border-color: var(--accent);
-      background: var(--accent-glo);
-    }
-    #dropZone.drag-active { transform: scale(1.01); }
-    .drop-icon {
-      font-size: 44px;
-      line-height: 1;
-      margin-bottom: 14px;
-      transition: transform var(--transition);
-    }
-    #dropZone.drag-active .drop-icon { transform: scale(1.15); }
-    .drop-title {
-      font-size: 16px;
-      font-weight: 600;
-      margin-bottom: 6px;
-    }
-    .drop-sub {
-      font-size: 13px;
-      color: var(--text-dim);
-      margin-bottom: 20px;
-    }
-    .btn-row {
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 9px 18px;
-      border-radius: var(--r-sm);
-      border: none;
-      font-size: 14px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background var(--transition), opacity var(--transition);
-      white-space: nowrap;
-    }
-    .btn:disabled { opacity: .45; cursor: not-allowed; }
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-primary:hover:not(:disabled) { background: var(--accent-h); }
-    .btn-ghost {
-      background: var(--surface-hi);
-      color: var(--text-dim);
-      border: 1px solid var(--border);
-    }
-    .btn-ghost:hover:not(:disabled) { color: var(--text); background: var(--border); }
-    .btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid transparent; }
-    .btn-danger:hover:not(:disabled) { background: var(--red); color: #fff; }
-    .btn-icon {
-      background: none;
-      border: none;
-      color: var(--text-dim);
-      cursor: pointer;
-      padding: 4px 6px;
-      border-radius: 6px;
-      font-size: 14px;
-      line-height: 1;
-      transition: color var(--transition), background var(--transition);
-    }
-    .btn-icon:hover { color: var(--red); background: var(--red-bg); }
-    .btn-icon.rescan:hover { color: var(--accent); background: var(--accent-glo); }
-    #legacyInput { display: none; }
-    label.btn { display: inline-flex; }
-    .fsapi-note {
-      margin-top: 10px;
-      font-size: 11px;
-      color: var(--text-dim);
-    }
-
-    /* ── Scan progress ────────────────────────────────────────────────────── */
-    #scanSection[hidden] { display: none; }
-    .scan-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 14px;
-    }
-    .scan-folder {
-      font-weight: 600;
-      font-size: 15px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      max-width: 360px;
-    }
-    .progress-track {
-      width: 100%;
-      height: 8px;
-      background: var(--surface-hi);
-      border-radius: 99px;
-      overflow: hidden;
-      margin-bottom: 10px;
-    }
-    .progress-fill {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, #4b7bec, #6890f5);
-      border-radius: 99px;
-      transition: width .25s ease;
-      box-shadow: 0 0 10px rgba(75,123,236,.5);
-    }
-    .progress-fill.done {
-      background: linear-gradient(90deg, var(--green), #5fedb0);
-      box-shadow: 0 0 10px rgba(46,204,138,.5);
-    }
-    .scan-meta {
-      display: flex;
-      justify-content: space-between;
-      font-size: 12px;
-      color: var(--text-dim);
-    }
-    .scan-file {
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--text-dim);
-      margin-top: 8px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      height: 16px;
-    }
-    .scan-eta { color: var(--accent); font-weight: 600; }
-
-    /* ── Results ──────────────────────────────────────────────────────────── */
-    #resultsSection[hidden] { display: none; }
-    .tc-wrap {
-      background: var(--gold-bg);
-      border: 1px solid var(--gold-border);
-      border-radius: var(--r);
-      padding: 24px;
-      text-align: center;
-      margin-bottom: 16px;
-    }
-    .tc-label {
-      font-family: var(--mono);
-      font-size: 10px;
-      letter-spacing: .18em;
-      text-transform: uppercase;
-      color: var(--text-dim);
-      margin-bottom: 10px;
-    }
-    .tc-value {
-      font-family: var(--mono);
-      font-size: clamp(40px, 10vw, 64px);
-      font-weight: 700;
-      color: var(--gold);
-      letter-spacing: 4px;
-      line-height: 1;
-    }
-    .tc-sub {
-      font-size: 13px;
-      color: var(--text-dim);
-      margin-top: 10px;
-    }
-    .results-actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 16px;
-    }
-    .results-actions .btn { flex: 1; min-width: 120px; justify-content: center; }
-
-    /* ── File table ───────────────────────────────────────────────────────── */
-    #tableToggle {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: none;
-      border: none;
-      color: var(--text-dim);
-      font-size: 13px;
-      cursor: pointer;
-      padding: 0;
-      margin-bottom: 12px;
-      transition: color var(--transition);
-    }
-    #tableToggle:hover { color: var(--text); }
-    #tableToggle .chevron { display: inline-block; transition: transform .2s; }
-    #tableToggle.open .chevron { transform: rotate(180deg); }
-    #fileTableWrap { display: none; }
-    #fileTableWrap.open {
-      display: block;
-      animation: fadeIn .18s ease;
-    }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
-    #fileTable {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-    #fileTable thead th {
-      text-align: left;
-      padding: 8px 10px;
-      border-bottom: 1px solid var(--border);
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      color: var(--text-dim);
-      cursor: pointer;
-      user-select: none;
-      white-space: nowrap;
-    }
-    #fileTable thead th:hover { color: var(--text); }
-    #fileTable thead th.sort-asc::after  { content: ' ↑'; color: var(--accent); }
-    #fileTable thead th.sort-desc::after { content: ' ↓'; color: var(--accent); }
-    #fileTable tbody td {
-      padding: 7px 10px;
-      border-bottom: 1px solid var(--border);
-      vertical-align: middle;
-    }
-    #fileTable tbody tr:last-child td { border-bottom: none; }
-    #fileTable tbody tr:hover td { background: var(--surface-hi); }
-    .td-name {
-      max-width: 360px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .td-dur {
-      font-family: var(--mono);
-      font-size: 12px;
-      color: var(--gold);
-      white-space: nowrap;
-      text-align: right;
-    }
-    .td-fail { color: var(--text-dim); font-style: italic; }
-    .td-dur.fail { color: var(--text-dim); }
-
-    /* ── History ──────────────────────────────────────────────────────────── */
-    #historySection { }
-    .history-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 14px;
-    }
-    #historyList {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .hist-empty {
-      font-size: 13px;
-      color: var(--text-dim);
-      font-style: italic;
-      text-align: center;
-      padding: 8px 0;
-    }
-    .hist-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
-      background: var(--surface-hi);
-      border-radius: var(--r-sm);
-      border: 1px solid var(--border);
-      transition: background var(--transition);
-    }
-    .hist-item:hover { background: var(--border); }
-    .hist-info { flex: 1; min-width: 0; }
-    .hist-folder {
-      font-size: 14px;
-      font-weight: 600;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .hist-meta {
-      font-size: 11px;
-      color: var(--text-dim);
-      margin-top: 2px;
-    }
-    .hist-dur {
-      font-family: var(--mono);
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--gold);
-      white-space: nowrap;
-      flex-shrink: 0;
-    }
-    .hist-actions {
-      display: flex;
-      gap: 4px;
-      flex-shrink: 0;
-    }
-
-    /* ── Toast ────────────────────────────────────────────────────────────── */
-    #toast {
-      position: fixed;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%) translateY(10px);
-      background: var(--surface-hi);
-      border: 1px solid var(--border);
-      color: var(--text);
-      font-size: 13px;
-      padding: 10px 20px;
-      border-radius: 99px;
-      opacity: 0;
-      transition: opacity .2s, transform .2s;
-      pointer-events: none;
-      white-space: nowrap;
-      z-index: 100;
-    }
-    #toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-    #toast.success { border-color: var(--green); color: var(--green); }
-    #toast.error   { border-color: var(--red);   color: var(--red); }
+    :root{--bg:#0e1016;--surface:#161b27;--surface-hi:#1d2437;--border:#28334a;--text:#dde3f0;--text-dim:#7e8da8;--accent:#4b7bec;--accent-h:#6890f5;--gold:#f5c842;--green:#2ecc8a;--red:#f04b4b;--red-bg:rgba(240,75,75,.12);--mono:ui-monospace,'Cascadia Code','Fira Code',monospace;--sans:system-ui,-apple-system,'Segoe UI',sans-serif;--r:12px;--r-sm:8px}
+    @media (prefers-color-scheme:light){:root{--bg:#eef1f7;--surface:#fff;--surface-hi:#f4f7ff;--border:#d0d8eb;--text:#1c2340;--text-dim:#6f7f99;--accent:#3a66d9;--accent-h:#2a54c4;--gold:#9a6d04;--green:#1a9a63;--red:#d63030;--red-bg:rgba(214,48,48,.08)}}
+    *{box-sizing:border-box;margin:0;padding:0}body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;padding:32px 16px 80px}#app{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:20px}header{display:flex;align-items:center;justify-content:space-between;gap:14px}.logo{display:flex;align-items:center;gap:14px}.logo-img{width:44px;height:44px}h1{font-size:20px;line-height:1.2}.tagline,.muted{font-size:12px;color:var(--text-dim)}.badge{font:11px var(--mono);color:var(--green);border:1px solid rgba(46,204,138,.35);border-radius:99px;padding:5px 10px;white-space:nowrap}.card,#dropZone{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px}#dropZone{text-align:center;border-style:dashed;transition:.18s}.drop-active,#dropZone:hover{border-color:var(--accent);background:rgba(75,123,236,.12)}.drop-icon{font-size:44px;margin-bottom:12px}.drop-title{font-size:16px;font-weight:700;margin-bottom:6px}.drop-sub{font-size:13px;color:var(--text-dim);margin-bottom:20px}.btn-row,.results-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;border-radius:var(--r-sm);border:0;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}.btn:disabled{opacity:.5;cursor:not-allowed}.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover:not(:disabled){background:var(--accent-h)}.btn-ghost{background:var(--surface-hi);color:var(--text);border:1px solid var(--border)}.btn-danger{background:var(--red-bg);color:var(--red);border:1px solid rgba(240,75,75,.25)}#legacyInput{display:none}#scanSection[hidden],#resultsSection[hidden]{display:none}.scan-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}.scan-folder{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.progress-track{height:8px;background:var(--surface-hi);border-radius:99px;overflow:hidden;margin-bottom:10px}.progress-fill{height:100%;width:0;background:linear-gradient(90deg,#4b7bec,#6890f5);border-radius:99px;transition:width .25s}.progress-fill.done{background:linear-gradient(90deg,var(--green),#5fedb0)}.scan-meta{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:var(--text-dim)}.scan-file{font:11px var(--mono);color:var(--text-dim);margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:16px}.tc-wrap{background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.3);border-radius:var(--r);padding:24px;text-align:center;margin-bottom:16px}.tc-label{font:10px var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px}.tc-value{font:700 clamp(40px,10vw,64px) var(--mono);color:var(--gold);letter-spacing:4px;line-height:1}.tc-sub{font-size:13px;color:var(--text-dim);margin-top:10px}.warn{margin:12px 0;padding:10px 12px;border-radius:var(--r-sm);background:var(--red-bg);color:var(--red);font-size:13px}table{width:100%;border-collapse:collapse;font-size:13px;margin-top:12px}th,td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left}th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-dim)}td.dur{text-align:right;font-family:var(--mono);color:var(--gold);white-space:nowrap}td.fail{color:var(--red)}.history-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.hist-item{display:flex;align-items:center;gap:10px;justify-content:space-between;background:var(--surface-hi);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 12px;margin-top:8px}.hist-title{font-size:14px;font-weight:700}.hist-meta{font-size:11px;color:var(--text-dim);margin-top:2px}.hist-dur{font:700 13px var(--mono);color:var(--gold);white-space:nowrap}#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--surface-hi);border:1px solid var(--border);color:var(--text);font-size:13px;padding:10px 20px;border-radius:99px;opacity:0;pointer-events:none;transition:.2s;z-index:20}#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   </style>
 </head>
 <body>
 <div id="app">
-
-  <!-- Header -->
   <header>
     <div class="logo">
       <img src="icon.svg" class="logo-img" alt="VRT">
-      <div>
-        <h1>Video Runtime Tracker</h1>
-        <p class="tagline">Total runtime of any local video folder — no uploads, no server.</p>
-      </div>
+      <div><h1>Video Runtime Tracker</h1><p class="tagline">Total runtime of a local video folder — no uploads, no server.</p></div>
     </div>
-    <button id="installBtn" hidden>📲 Install</button>
+    <span class="badge" id="buildBadge">v7 direct</span>
   </header>
 
-  <!-- Drop zone -->
   <div id="dropZone">
     <div class="drop-icon">📂</div>
     <div class="drop-title">Drop a video folder here</div>
@@ -484,902 +33,216 @@
       <label class="btn btn-ghost" for="legacyInput">🗂 Legacy Picker</label>
       <input type="file" id="legacyInput" webkitdirectory directory multiple>
     </div>
-    <p class="fsapi-note" id="fsApiNote"></p>
+    <p class="muted" id="fsApiNote" style="margin-top:10px"></p>
   </div>
 
-  <!-- Scan progress -->
   <section class="card" id="scanSection" hidden>
-    <div class="scan-header">
-      <span class="scan-folder" id="scanFolder">Scanning…</span>
-      <button class="btn btn-danger" id="cancelBtn" style="padding:7px 14px;font-size:13px;">✕ Cancel</button>
-    </div>
-    <div class="progress-track">
-      <div class="progress-fill" id="progressFill"></div>
-    </div>
-    <div class="scan-meta">
-      <span id="scanCount">0 / 0 files</span>
-      <span class="scan-eta" id="scanEta"></span>
-    </div>
+    <div class="scan-header"><span class="scan-folder" id="scanFolder">Scanning…</span><button class="btn btn-danger" id="cancelBtn">✕ Cancel</button></div>
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="scan-meta"><span id="scanCount">0 / 0 videos</span><span id="scanEta"></span></div>
     <div class="scan-file" id="scanFile"></div>
   </section>
 
-  <!-- Results -->
   <section class="card" id="resultsSection" hidden>
-    <div class="tc-wrap">
-      <div class="tc-label">Total Runtime</div>
-      <div class="tc-value" id="tcValue">00:00:00</div>
-      <div class="tc-sub" id="tcSub"></div>
-    </div>
-    <div class="results-actions">
-      <button class="btn btn-primary"  id="saveBtn">💾 Save to History</button>
-      <button class="btn btn-ghost"    id="csvBtn">⬇ Export CSV</button>
-      <button class="btn btn-ghost"    id="copyBtn">📋 Copy Summary</button>
-      <button class="btn btn-ghost"    id="newScanBtn">🔄 New Scan</button>
-    </div>
-    <button id="tableToggle">
-      <span class="chevron">▾</span>
-      <span id="tableToggleLabel">Show file list</span>
-    </button>
-    <div id="fileTableWrap">
-      <table id="fileTable">
-        <thead>
-          <tr>
-            <th data-col="name">Filename</th>
-            <th data-col="duration" style="text-align:right;">Duration</th>
-          </tr>
-        </thead>
-        <tbody id="fileTableBody"></tbody>
-      </table>
-    </div>
+    <div class="tc-wrap"><div class="tc-label">Total Runtime</div><div class="tc-value" id="tcValue">00:00:00</div><div class="tc-sub" id="tcSub"></div></div>
+    <div id="failNotice"></div>
+    <div class="results-actions"><button class="btn btn-primary" id="saveBtn">💾 Save</button><button class="btn btn-ghost" id="csvBtn">⬇ Export CSV</button><button class="btn btn-ghost" id="copyBtn">📋 Copy Summary</button><button class="btn btn-ghost" id="newScanBtn">🔄 New Scan</button></div>
+    <table><thead><tr><th>Filename</th><th style="text-align:right">Duration</th><th>Status</th></tr></thead><tbody id="fileTableBody"></tbody></table>
   </section>
 
-  <!-- History -->
-  <section class="card" id="historySection">
-    <div class="history-header">
-      <span class="card-title" style="margin:0;">Scan History</span>
-      <button class="btn btn-ghost" id="clearAllBtn" style="padding:6px 12px;font-size:12px;">Clear All</button>
-    </div>
-    <div id="historyList"><p class="hist-empty">No scans saved yet.</p></div>
-  </section>
-
+  <section class="card"><div class="history-header"><span class="muted" style="font-weight:700;letter-spacing:.12em;text-transform:uppercase">Scan History</span><button class="btn btn-ghost" id="clearAllBtn" style="padding:6px 12px;font-size:12px">Clear All</button></div><div id="historyList"></div></section>
 </div>
-
-<!-- Toast -->
 <div id="toast"></div>
-
+<script src="./vrt-hotfix.js?v=v7-direct"></script>
 <script>
-/* ═══════════════════════════════════════════════════════════════════════════
-   VRT — Video Runtime Tracker
-   ═══════════════════════════════════════════════════════════════════════════ */
+const BUILD = 'vrt-direct-v7';
+const TOTAL_CONCURRENCY = 4;
+const VIDEO_EXTS = new Set(['3g2','3gp','asf','avi','divx','dv','f4v','flv','m2ts','m4v','m4b','m4p','mkv','mod','mov','mp4','mpe','mpeg','mpg','mts','mxf','ogm','ogv','rm','rmvb','tod','ts','vob','webm','wm','wmv']);
+const DOC_EXTS = new Set(['pdf','txt','rtf','doc','docx','odt','pages','xls','xlsx','ods','csv','ppt','pptx','odp','key','json','xml','html','htm','md','zip','rar','7z']);
+const S = { scanning:false, cancelled:false, results:null, discovery:null };
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-// ── Constants ──────────────────────────────────────────────────────────────
+cleanupOldPWA();
+$('fsApiNote').textContent = window.showDirectoryPicker ? 'Chrome/Edge: use Choose Folder for best results.' : 'Your browser does not support the modern folder picker. Use Legacy Picker.';
+renderHistory();
 
-const APP_VERSION = 'vrt-v3';
-const CONCURRENCY = 16;    // parallel video reads
-// Do not rely on File.type. Browsers often leave it blank for local files.
-// The scanner now ignores obvious documents/PDFs and attempts duration reads
-// for every other file, so uncommon video extensions are not silently skipped.
-const VIDEO_MIME = 'video/';
-const VIDEO_EXTS = new Set([
-  '3g2','3gp','asf','avi','divx','dv','f4v','flv','m2ts','m4v','mkv','mod',
-  'mov','mp4','mpe','mpeg','mpg','mts','mxf','ogm','ogv','rm','rmvb','tod',
-  'ts','vob','webm','wm','wmv'
-]);
-const DOCUMENT_EXTS = new Set([
-  'pdf','txt','rtf','doc','docx','odt','pages','xls','xlsx','ods','csv',
-  'ppt','pptx','odp','key','json','xml','html','htm','md','zip','rar','7z'
-]);
-
-// ── State ──────────────────────────────────────────────────────────────────
-
-const S = {
-  scanning:        false,
-  ac:              null,       // AbortController
-  currentHandle:   null,       // FileSystemDirectoryHandle (current scan)
-  results:         null,       // last completed scan result object
-  sortCol:         'name',
-  sortDir:         'asc',
-  tableOpen:       false,
-  pendingHandleCb: null,       // resolves when worker returns 'handle' msg
-  lastDiscovery:  null,       // { totalFiles, ignoredFiles } for the latest folder enumeration
-};
-
-// ── Worker ─────────────────────────────────────────────────────────────────
-
-const worker = new Worker('./worker.js?v=' + APP_VERSION);
-
-worker.onmessage = ({ data }) => {
-  switch (data.type) {
-    case 'history':
-      renderHistory(data.scans);
-      break;
-    case 'handle':
-      if (S.pendingHandleCb) { S.pendingHandleCb(data.handle); S.pendingHandleCb = null; }
-      break;
-    case 'error':
-      toast('Worker error: ' + data.message, 'error');
-      break;
-  }
-};
-
-worker.postMessage({ type: 'load' });
-
-// ── Service Worker ─────────────────────────────────────────────────────────
-
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js?v=' + APP_VERSION).catch(() => {});
+async function cleanupOldPWA(){
+  try { if ('caches' in window) { const keys = await caches.keys(); await Promise.all(keys.filter(k => k.startsWith('vrt-')).map(k => caches.delete(k))); } } catch (_) {}
+  try { if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.unregister())); } } catch (_) {}
 }
 
-// ── PWA install ────────────────────────────────────────────────────────────
+function fileExt(file){ const n=(file && file.name || '').toLowerCase(); const d=n.lastIndexOf('.'); return d<0 || d===n.length-1 ? '' : n.slice(d+1); }
+function pathOf(file){ return file.webkitRelativePath || file.relativePath || file.name || 'unknown'; }
+function localShouldAttempt(file){ const ext=fileExt(file); const mime=(file.type || '').toLowerCase(); if (mime.startsWith('video/') || VIDEO_EXTS.has(ext)) return true; if (mime === 'application/pdf' || DOC_EXTS.has(ext)) return false; return !mime || mime === 'application/octet-stream' || mime.startsWith('application/'); }
+function shouldAttempt(file){ return typeof window.shouldAttemptDuration === 'function' ? window.shouldAttemptDuration(file) : localShouldAttempt(file); }
 
-let installPrompt = null;
-const installBtn  = document.getElementById('installBtn');
-
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  installPrompt = e;
-  installBtn.hidden = false;
-});
-
-installBtn.addEventListener('click', async () => {
-  if (!installPrompt) return;
-  await installPrompt.prompt();
-  installPrompt = null;
-  installBtn.hidden = true;
-});
-
-// ── File System Access API detection ──────────────────────────────────────
-
-const hasFSAPI  = 'showDirectoryPicker' in window;
-const fsApiNote = document.getElementById('fsApiNote');
-const fsApiBtn  = document.getElementById('fsApiBtn');
-
-if (!hasFSAPI) {
-  fsApiBtn.textContent = '📁 Choose Folder';
-  fsApiNote.textContent = 'Tip: Chrome/Edge support drag-and-drop re-scanning via the File System API.';
-} else {
-  fsApiNote.textContent = 'Re-scan any saved folder in one click with the File System API.';
-}
-
-// ── Drop zone ──────────────────────────────────────────────────────────────
-
-const dropZone = document.getElementById('dropZone');
-
-['dragenter', 'dragover'].forEach(evt =>
-  dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.add('drag-active'); })
-);
-['dragleave', 'dragend', 'drop'].forEach(evt =>
-  dropZone.addEventListener(evt, () => dropZone.classList.remove('drag-active'))
-);
-
-dropZone.addEventListener('drop', async e => {
-  e.preventDefault();
-  if (S.scanning) return;
-  const items = [...e.dataTransfer.items];
-
-  // Try File System Access API first (Chrome/Edge 86+)
-  if (hasFSAPI && items[0]?.getAsFileSystemHandle) {
-    try {
-      const handle = await items[0].getAsFileSystemHandle();
-      if (handle.kind === 'directory') {
-        await launchScanFromHandle(handle);
-        return;
-      }
-    } catch (_) { /* fall through */ }
-  }
-
-  // Fallback: webkitGetAsEntry
-  const entry = items[0]?.webkitGetAsEntry?.();
-  if (entry?.isDirectory) {
-    const discovery = { totalFiles: 0, ignoredFiles: 0 };
-    const files = await readEntryRecursive(entry, discovery);
-    S.lastDiscovery = discovery;
-    await launchScanFromFiles(files, null);
-  } else {
-    toast('Please drop a folder, not individual files.', 'error');
-  }
-});
-
-// ── FSAPI button ───────────────────────────────────────────────────────────
-
-fsApiBtn.addEventListener('click', async () => {
-  if (S.scanning) return;
-  if (!hasFSAPI) { document.getElementById('legacyInput').click(); return; }
+async function readDuration(file){
   try {
-    const handle = await window.showDirectoryPicker({ mode: 'read' });
-    await launchScanFromHandle(handle);
-  } catch (e) {
-    if (e.name !== 'AbortError') toast('Could not open folder.', 'error');
-  }
-});
-
-// ── Legacy file input ──────────────────────────────────────────────────────
-
-document.getElementById('legacyInput').addEventListener('change', async e => {
-  if (S.scanning) return;
-  const all   = Array.from(e.target.files);
-  const files = all.filter(shouldAttemptDuration);
-  S.lastDiscovery = { totalFiles: all.length, ignoredFiles: all.length - files.length };
-  if (!files.length) { toast('No videos or scan candidates found.', 'error'); return; }
-  await launchScanFromFiles(files, null);
-  e.target.value = '';
-});
-
-// ── Video detection ───────────────────────────────────────────────────────
-
-function fileExt(file) {
-  const name = (file.name || '').toLowerCase();
-  const dot  = name.lastIndexOf('.');
-  return dot === -1 || dot === name.length - 1 ? '' : name.slice(dot + 1);
-}
-
-function isKnownVideoFile(file) {
-  const mime = (file.type || '').toLowerCase();
-  if (mime.startsWith(VIDEO_MIME)) return true;
-  return VIDEO_EXTS.has(fileExt(file));
-}
-
-function shouldAttemptDuration(file) {
-  const ext  = fileExt(file);
-  const mime = (file.type || '').toLowerCase();
-  const name = (file.name || '').toLowerCase();
-
-  // Keep PDFs and obvious non-video documents out of the scan.
-  if (mime === 'application/pdf' || DOCUMENT_EXTS.has(ext)) return false;
-
-  // Always scan known videos.
-  if (isKnownVideoFile(file)) return true;
-
-  // Critical fallback: many local videos have blank or generic MIME and may use
-  // uncommon extensions. Attempt metadata extraction instead of skipping them.
-  if (!mime || mime === 'application/octet-stream') return true;
-
-  // Some OS/browser combinations provide generic binary MIME strings.
-  if (mime.startsWith('application/')) return true;
-
-  return false;
-}
-
-// ── Collect files from FSAPI handle ───────────────────────────────────────
-
-async function collectFromHandle(dirHandle, discovery = null) {
-  const files = [];
-  for await (const [, entry] of dirHandle.entries()) {
-    if (entry.kind === 'file') {
-      const f = await entry.getFile();
-      if (discovery) discovery.totalFiles++;
-      if (shouldAttemptDuration(f)) files.push(f);
-      else if (discovery) discovery.ignoredFiles++;
-    } else if (entry.kind === 'directory') {
-      files.push(...await collectFromHandle(entry, discovery)); // recurse
+    if (typeof window.getVideoDuration === 'function') {
+      const r = await window.getVideoDuration(file);
+      return r && Number.isFinite(r.duration) && r.duration > 0 ? { duration:r.duration, success:true } : { duration:0, success:false };
     }
-  }
-  return files;
+  } catch (_) {}
+  return parseDurationElementFallback(file);
 }
 
-// Collect from webkitGetAsEntry (drag-drop fallback)
-// BUG FIXES: (1) readEntries() returns max 100 per call — must loop until empty batch
-//            (2) added error callbacks so a bad entry never hangs the Promise
-function readEntryRecursive(entry, discovery = null) {
+function parseDurationElementFallback(file){
   return new Promise(resolve => {
-    if (entry.isFile) {
-      entry.file(
-        f  => {
-          if (discovery) discovery.totalFiles++;
-          if (shouldAttemptDuration(f)) resolve([f]);
-          else { if (discovery) discovery.ignoredFiles++; resolve([]); }
-        },
-        () => resolve([])   // file access error — skip silently
-      );
-    } else if (entry.isDirectory) {
-      const reader  = entry.createReader();
-      const all     = [];
-      const readBatch = () => {
-        reader.readEntries(async batch => {
-          if (!batch.length) {
-            // All batches consumed — recurse into each entry
-            const results = [];
-            for (const e of all) results.push(...await readEntryRecursive(e, discovery));
-            resolve(results);
-          } else {
-            all.push(...batch);
-            readBatch(); // fetch next batch (may be another 100)
-          }
-        }, () => resolve([])); // readEntries error — resolve empty
-      };
-      readBatch();
-    } else {
-      resolve([]);
-    }
-  });
-}
-
-// ── Scan launchers ─────────────────────────────────────────────────────────
-
-async function launchScanFromHandle(dirHandle) {
-  const discovery = { totalFiles: 0, ignoredFiles: 0 };
-  const files = await collectFromHandle(dirHandle, discovery);
-  S.lastDiscovery = discovery;
-  if (!files.length) { toast('No videos or scan candidates found in that folder.', 'error'); return; }
-  S.currentHandle = dirHandle;
-  await launchScanFromFiles(files, dirHandle.name);
-}
-
-async function launchScanFromFiles(files, overrideName) {
-  if (!files.length) return;
-  // BUG FIX: if not coming from FSAPI (overrideName is null), clear any stale
-  // handle left over from a previous scan so hasHandle is never set incorrectly.
-  if (overrideName === null) S.currentHandle = null;
-  const folderName = overrideName
-    ?? (files[0].webkitRelativePath?.split('/')?.[0] || 'Unknown Folder');
-
-  await startScan(files, folderName);
-}
-
-// ── Core: start scan ───────────────────────────────────────────────────────
-
-async function startScan(files, folderName) {
-  if (S.scanning) return;
-  S.scanning = true;
-  S.results  = null;
-
-  // Reset results UI
-  el('resultsSection').hidden = true;
-  el('scanSection').hidden    = false;
-  el('scanFolder').textContent = folderName;
-  el('progressFill').style.width = '0%';
-  el('progressFill').classList.remove('done');
-  el('scanEta').textContent  = '';
-  el('scanCount').textContent = `0 / ${files.length} videos`;
-  el('scanFile').textContent  = S.lastDiscovery
-    ? `Found ${S.lastDiscovery.totalFiles} files · scanning ${files.length} · ignored ${S.lastDiscovery.ignoredFiles}`
-    : '';
-  window.scrollTo({ top: el('scanSection').offsetTop - 20, behavior: 'smooth' });
-
-  S.ac = new AbortController();
-  const { signal } = S.ac;
-  const startTime  = Date.now();
-  let   processed  = 0;
-  let   failed     = 0;
-  const fileResults = [];
-
-  try {
-    // Pool-based concurrency: always keeps CONCURRENCY slots in flight.
-    // Unlike chunking, a slow file never stalls idle slots waiting on the next chunk.
-    let nextIdx = 0;
-
-    const runSlot = async () => {
-      while (nextIdx < files.length) {
-        if (signal.aborted) throw new DOMException('Cancelled', 'AbortError');
-        const file = files[nextIdx++]; // JS is single-threaded: no race on nextIdx
-
-        const { duration, success } = await getVideoDuration(file);
-        if (signal.aborted) return;   // discard result if cancelled mid-flight
-
-        if (!success) failed++;
-        fileResults.push({ name: file.name, duration, success });
-
-        processed++;
-        const elapsed = (Date.now() - startTime) / 1000;
-        const rate    = processed / elapsed;
-        const eta     = Math.round((files.length - processed) / rate);
-        const pct     = Math.round((processed / files.length) * 100);
-
-        el('scanFile').textContent     = processed < files.length ? file.name : '';
-        el('progressFill').style.width = pct + '%';
-        el('scanCount').textContent    = `${processed} / ${files.length} videos`;
-        el('scanEta').textContent      = processed < files.length
-          ? `ETA: ${formatEta(eta)}` : '';
-      }
-    };
-
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, runSlot));
-
-    if (signal.aborted) return;
-
-    const totalDuration = fileResults.reduce((s, r) => s + (r.success ? r.duration : 0), 0);
-
-    S.results = {
-      id:            'scan_' + Date.now(),
-      folderName,
-      timestamp:     Date.now(),
-      totalDuration,
-      fileCount:     files.length,
-      failedCount:   failed,
-      hasHandle:     !!S.currentHandle,
-      discovery:      S.lastDiscovery,
-      files:         fileResults,
-    };
-
-    el('progressFill').classList.add('done');
-    el('progressFill').style.width = '100%';
-    el('scanFile').textContent = '';
-    el('scanEta').textContent  = '✅ Complete';
-
-    setTimeout(showResults, 500);
-
-  } catch (e) {
-    if (e.name === 'AbortError') {
-      toast('Scan cancelled.', 'error');
-      el('scanSection').hidden = true;
-    } else {
-      toast('Scan error: ' + e.message, 'error');
-    }
-  } finally {
-    S.scanning       = false;
-    S.ac             = null;
-  }
-}
-
-// ── Duration extraction — 3-tier strategy ─────────────────────────────────
-//
-//  1. Binary parse MP4/MOV  — Blob.slice() only, zero DOM elements,
-//                             reads ≤ 330 KB regardless of file size.
-//  2. Binary parse WebM/MKV — reads ≤ 128 KB.
-//  3. HTMLVideoElement       — fallback for AVI/WMV/FLV/MTS/…
-//                             10 s timeout prevents browser-queue hangs.
-//
-// The video-element approach is why the old version stalled at ~5 files:
-// browsers limit concurrent media-element loaders to 4–8; extras queue
-// silently with neither onloadedmetadata nor onerror ever firing.
-
-async function getVideoDuration(file) {
-  const ext  = file.name.split('.').pop().toLowerCase();
-  const mime = file.type.toLowerCase();
-
-  if (['mp4','m4v','mov','m4b','m4p'].includes(ext) ||
-      mime === 'video/mp4' || mime === 'video/quicktime') {
-    const d = await parseDurationMP4(file);
-    if (d !== null && isFinite(d) && d > 0) return { duration: d, success: true };
-  }
-
-  if (['webm','mkv'].includes(ext) ||
-      mime === 'video/webm' || mime === 'video/x-matroska') {
-    const d = await parseDurationWebM(file);
-    if (d !== null && isFinite(d) && d > 0) return { duration: d, success: true };
-  }
-
-  return parseDurationElement(file);
-}
-
-// ── MP4 / MOV binary parser ────────────────────────────────────────────────
-
-async function parseDurationMP4(file) {
-  try {
-    // Faststart files carry moov in the first 64 KB
-    let buf = await file.slice(0, 65536).arrayBuffer();
-    let dur = mp4FindMoov(new DataView(buf));
-    if (dur !== null) return dur;
-
-    // Non-faststart: moov sits at the end — read last 256 KB
-    buf = await file.slice(Math.max(0, file.size - 262144)).arrayBuffer();
-    dur = mp4FindMoov(new DataView(buf));
-    if (dur !== null) return dur;
-
-    // Last resort: byte-level signature scan through that same tail buffer
-    return mp4SigScan(new DataView(buf));
-  } catch { return null; }
-}
-
-function mp4FindMoov(view) {
-  let off = 0;
-  while (off + 8 <= view.byteLength) {
-    let size = view.getUint32(off);
-    const type = str4(view, off + 4);
-    if (size === 1) {                         // extended 64-bit size header
-      if (off + 16 > view.byteLength) break;
-      size = view.getUint32(off + 8) * 0x100000000 + view.getUint32(off + 12);
-    }
-    if (size === 0 || size < 8) break;        // 0 = box runs to EOF; < 8 = corrupt
-    if (type === 'moov')
-      return mp4ReadMvhd(view, off + 8, Math.min(off + size, view.byteLength));
-    off += size;
-  }
-  return null;
-}
-
-function mp4ReadMvhd(view, start, end) {
-  let off = start;
-  end = Math.min(end, view.byteLength);
-  while (off + 8 <= end) {
-    const size = view.getUint32(off);
-    const type = str4(view, off + 4);
-    if (size < 8) break;
-    if (type === 'mvhd') {
-      const ver = view.getUint8(off + 8);
-      // v0: timescale@20, duration@24 (4 bytes each)
-      // v1: timescale@28, duration@32 (8 bytes)
-      if (ver === 0 && off + 28 <= end) {
-        const ts = view.getUint32(off + 20);
-        return ts > 0 ? view.getUint32(off + 24) / ts : null;
-      }
-      if (ver === 1 && off + 40 <= end) {
-        const ts  = view.getUint32(off + 28);
-        const dur = view.getUint32(off + 32) * 0x100000000 + view.getUint32(off + 36);
-        return ts > 0 ? dur / ts : null;
-      }
-    }
-    off += size;
-  }
-  return null;
-}
-
-function mp4SigScan(view) {
-  // Scan byte-by-byte for the ASCII signature 'moov' at bytes +4..+7 of a box
-  for (let i = 0; i + 12 < view.byteLength; i++) {
-    if (str4(view, i + 4) === 'moov') return mp4ReadMvhd(view, i + 8, view.byteLength);
-  }
-  return null;
-}
-
-// ── WebM / MKV binary parser ───────────────────────────────────────────────
-
-async function parseDurationWebM(file) {
-  try {
-    const view = new DataView(await file.slice(0, 131072).arrayBuffer());
-    // Verify EBML magic bytes: 0x1A 0x45 0xDF 0xA3
-    if (view.byteLength < 4 || view.getUint32(0) !== 0x1A45DFA3) return null;
-
-    let off = 0;
-    while (off + 5 < view.byteLength) {
-      const id = ebmlId(view, off);          if (!id) break;
-      const sz = ebmlSz(view, off + id.w);   if (!sz) break;
-      const d  = off + id.w + sz.w;
-      if (id.v === 0x18538067) return webmSegment(view, d); // Segment
-      if (sz.v < 0) break;
-      off = d + sz.v;
-    }
-    return null;
-  } catch { return null; }
-}
-
-function webmSegment(view, off) {
-  while (off + 5 < view.byteLength) {
-    const id = ebmlId(view, off);          if (!id) break;
-    const sz = ebmlSz(view, off + id.w);   if (!sz) break;
-    const d  = off + id.w + sz.w;
-    const end = sz.v >= 0 ? Math.min(d + sz.v, view.byteLength) : view.byteLength;
-    if (id.v === 0x1549A966) return webmInfo(view, d, end); // Info
-    if (id.v === 0x1F43B675) break;                         // Cluster — past Info
-    if (sz.v < 0) { off = d; continue; }
-    off = d + sz.v;
-  }
-  return null;
-}
-
-function webmInfo(view, off, end) {
-  let tcs = 1_000_000, dur = null; // TimecodeScale default: 1 ms in nanoseconds
-  while (off + 3 < end) {
-    const id = ebmlId(view, off);          if (!id) break;
-    const sz = ebmlSz(view, off + id.w);   if (!sz || sz.v < 0) break;
-    const d  = off + id.w + sz.w;
-    if (id.v === 0x2AD7B1 && sz.v <= 8) { // TimecodeScale (big-endian int)
-      let v = 0;
-      for (let i = 0; i < sz.v; i++) v = v * 256 + view.getUint8(d + i);
-      tcs = v;
-    }
-    if (id.v === 0x4489)                   // Duration (float32 or float64)
-      dur = sz.v === 4 ? view.getFloat32(d) : view.getFloat64(d);
-    off = d + sz.v;
-  }
-  return dur !== null ? (dur * tcs) / 1e9 : null;
-}
-
-// EBML variable-length integer helpers
-function ebmlId(view, off) {
-  if (off >= view.byteLength) return null;
-  const b = view.getUint8(off);
-  const w = b&0x80?1 : b&0x40?2 : b&0x20?3 : b&0x10?4 : 0;
-  if (!w || off + w > view.byteLength) return null;
-  let v = b;
-  for (let i = 1; i < w; i++) v = (v << 8) | view.getUint8(off + i);
-  return { v: v >>> 0, w };  // >>> 0 keeps it unsigned
-}
-
-function ebmlSz(view, off) {
-  if (off >= view.byteLength) return null;
-  const b = view.getUint8(off);
-  const w = b&0x80?1 : b&0x40?2 : b&0x20?3 : b&0x10?4 :
-            b&0x08?5 : b&0x04?6 : b&0x02?7 : b&0x01?8 : 0;
-  if (!w || off + w > view.byteLength) return null;
-  if (w > 4) return { v: -1, w };          // oversized — treat as unknown
-  const mask = 0x80 >> (w - 1);
-  let v = b ^ mask;                         // strip marker bit
-  for (let i = 1; i < w; i++) v = v * 256 + view.getUint8(off + i);
-  const allOnes = (1 << (7 * w)) - 1;
-  return { v: v === allOnes ? -1 : v, w }; // -1 = unknown/indefinite size
-}
-
-// ── HTMLVideoElement fallback (AVI, WMV, FLV, MTS, …) ─────────────────────
-
-function parseDurationElement(file) {
-  return new Promise(resolve => {
-    const url   = URL.createObjectURL(file);
+    const url = URL.createObjectURL(file);
     const video = document.createElement('video');
+    let done = false;
     video.preload = 'metadata';
-
-    const done = (duration, success) => {
-      clearTimeout(t);
-      video.onloadedmetadata = video.onerror = null;
-      URL.revokeObjectURL(url);
-      video.src = '';
-      resolve({ duration, success });
-    };
-
-    // 10 s hard timeout — prevents permanent hangs when the browser's
-    // concurrent media-element queue is full (limit is typically 4–8).
-    const t = setTimeout(() => done(0, false), 10000);
-
-    video.onloadedmetadata = () => {
-      const d = isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
-      done(d, d > 0);
-    };
-    video.onerror = () => done(0, false);
-
+    video.muted = true;
+    video.playsInline = true;
+    const finish = (duration, success) => { if (done) return; done = true; clearTimeout(timer); video.onloadedmetadata = video.ondurationchange = video.onerror = null; video.removeAttribute('src'); try { video.load(); } catch (_) {} URL.revokeObjectURL(url); resolve({ duration, success }); };
+    const read = () => { const d = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0; if (d > 0) finish(d, true); };
+    const timer = setTimeout(() => finish(0, false), 45000);
+    video.onloadedmetadata = read;
+    video.ondurationchange = read;
+    video.onerror = () => finish(0, false);
     video.src = url;
     video.load();
   });
 }
 
-// Reads 4 bytes as an ASCII string (MP4 box type helper)
-function str4(view, off) {
-  return off + 4 <= view.byteLength
-    ? String.fromCharCode(
-        view.getUint8(off), view.getUint8(off+1),
-        view.getUint8(off+2), view.getUint8(off+3))
-    : '';
-}
-
-// ── Cancel ─────────────────────────────────────────────────────────────────
-
-el('cancelBtn').addEventListener('click', () => {
-  if (S.ac) S.ac.abort();
-});
-
-// ── Show results ───────────────────────────────────────────────────────────
-
-function showResults() {
-  const r = S.results;
-  if (!r) return;
-
-  el('tcValue').textContent = formatTC(r.totalDuration);
-  const discoveryText = r.discovery
-    ? ` · found ${r.discovery.totalFiles} files, ignored ${r.discovery.ignoredFiles}`
-    : '';
-  el('tcSub').textContent   =
-    `${r.folderName} · ${r.fileCount} videos/candidates` +
-    discoveryText +
-    (r.failedCount ? ` · ${r.failedCount} failed` : '');
-
-  el('scanSection').hidden    = true;
-  el('resultsSection').hidden = false;
-
-  // BUG FIX: reset Save button — it stays disabled after being clicked on a
-  // previous scan, which makes it permanently broken for subsequent scans.
-  el('saveBtn').textContent = '💾 Save to History';
-  el('saveBtn').disabled    = false;
-
-  // Reset sort & table
-  S.sortCol   = 'name';
-  S.sortDir   = 'asc';
-  S.tableOpen = false;
-  el('tableToggle').classList.remove('open');
-  el('fileTableWrap').classList.remove('open');
-  el('tableToggleLabel').textContent = `Show video list (${r.fileCount})`;
-  updateTableHeaders();
-  renderFileTable();
-
-  window.scrollTo({ top: el('resultsSection').offsetTop - 20, behavior: 'smooth' });
-}
-
-// ── File table ─────────────────────────────────────────────────────────────
-
-function renderFileTable() {
-  const r = S.results;
-  if (!r) return;
-  const sorted = [...r.files].sort((a, b) => {
-    const m = S.sortDir === 'asc' ? 1 : -1;
-    if (S.sortCol === 'name') return m * a.name.localeCompare(b.name);
-    return m * (a.duration - b.duration);
-  });
-
-  const tbody = el('fileTableBody');
-  tbody.innerHTML = '';
-  sorted.forEach(({ name, duration, success }) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="td-name ${success ? '' : 'td-fail'}" title="${esc(name)}">${esc(name)}</td>
-      <td class="td-dur ${success ? '' : 'fail'}">${success ? formatTC(duration) : '—'}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function updateTableHeaders() {
-  document.querySelectorAll('#fileTable thead th').forEach(th => {
-    th.classList.remove('sort-asc', 'sort-desc');
-    if (th.dataset.col === S.sortCol)
-      th.classList.add('sort-' + S.sortDir);
-  });
-}
-
-document.querySelectorAll('#fileTable thead th').forEach(th => {
-  th.addEventListener('click', () => {
-    const col = th.dataset.col;
-    if (S.sortCol === col) S.sortDir = S.sortDir === 'asc' ? 'desc' : 'asc';
-    else { S.sortCol = col; S.sortDir = 'asc'; }
-    updateTableHeaders();
-    renderFileTable();
-  });
-});
-
-el('tableToggle').addEventListener('click', () => {
-  S.tableOpen = !S.tableOpen;
-  el('tableToggle').classList.toggle('open', S.tableOpen);
-  el('fileTableWrap').classList.toggle('open', S.tableOpen);
-});
-
-// ── Results actions ────────────────────────────────────────────────────────
-
-el('saveBtn').addEventListener('click', () => {
-  const r = S.results;
-  if (!r) return;
-  worker.postMessage({ type: 'save', scan: r });
-  if (r.hasHandle && S.currentHandle) {
-    worker.postMessage({ type: 'saveHandle', scanId: r.id, handle: S.currentHandle });
+async function collectFromHandle(dirHandle, discovery){
+  const files = [];
+  for await (const [, entry] of dirHandle.entries()) {
+    try {
+      if (entry.kind === 'file') {
+        const f = await entry.getFile();
+        discovery.totalFiles++;
+        if (shouldAttempt(f)) files.push(f); else discovery.ignoredFiles++;
+      } else if (entry.kind === 'directory') {
+        files.push(...await collectFromHandle(entry, discovery));
+      }
+    } catch (_) { discovery.ignoredFiles++; }
   }
-  el('saveBtn').textContent  = '✅ Saved!';
-  el('saveBtn').disabled     = true;
-  toast('Scan saved to history.', 'success');
-});
+  return files;
+}
 
-el('csvBtn').addEventListener('click', () => {
-  const r = S.results;
-  if (!r) return;
-  const rows = [['Filename', 'Duration (s)', 'Duration (H:MM:SS)', 'Status']];
-  r.files.forEach(f => rows.push([
-    `"${f.name.replace(/"/g, '""')}"`,
-    f.success ? f.duration.toFixed(3) : '',
-    f.success ? formatTC(f.duration) : '',
-    f.success ? 'ok' : 'failed',
-  ]));
-  const csv = rows.map(r => r.join(',')).join('\n');
-  const a = Object.assign(document.createElement('a'), {
-    href:     'data:text/csv;charset=utf-8,' + encodeURIComponent(csv),
-    download: `${r.folderName}_runtime.csv`,
+function readEntryRecursive(entry, discovery){
+  return new Promise(resolve => {
+    if (!entry) return resolve([]);
+    if (entry.isFile) {
+      entry.file(f => { discovery.totalFiles++; if (shouldAttempt(f)) resolve([f]); else { discovery.ignoredFiles++; resolve([]); } }, () => { discovery.ignoredFiles++; resolve([]); });
+      return;
+    }
+    if (!entry.isDirectory) return resolve([]);
+    const reader = entry.createReader();
+    const entries = [];
+    const readBatch = () => reader.readEntries(async batch => {
+      if (!batch.length) { const out = []; for (const child of entries) out.push(...await readEntryRecursive(child, discovery)); resolve(out); }
+      else { entries.push(...batch); readBatch(); }
+    }, () => resolve([]));
+    readBatch();
   });
-  a.click();
-  toast('CSV downloaded.', 'success');
-});
+}
 
-el('copyBtn').addEventListener('click', async () => {
-  const r = S.results;
-  if (!r) return;
-  const text = `Video Runtime Tracker\n📁 ${r.folderName}\n⏱ ${formatTC(r.totalDuration)}  (${formatHMS(r.totalDuration)})\n📄 ${r.fileCount} videos/candidates${r.failedCount ? `, ${r.failedCount} failed` : ''}\n🕐 Scanned ${new Date(r.timestamp).toLocaleString()}`;
+$('fsApiBtn').addEventListener('click', async () => {
+  if (S.scanning) return;
+  if (!window.showDirectoryPicker) { $('legacyInput').click(); return; }
   try {
-    await navigator.clipboard.writeText(text);
-    toast('Copied to clipboard!', 'success');
-  } catch {
-    toast('Copy failed — try a different browser.', 'error');
+    const handle = await window.showDirectoryPicker({ mode:'read' });
+    const discovery = { totalFiles:0, ignoredFiles:0 };
+    const files = await collectFromHandle(handle, discovery);
+    await startScan(files, handle.name || 'Selected Folder', discovery);
+  } catch (e) { if (e.name !== 'AbortError') toast('Could not open folder.'); }
+});
+
+$('legacyInput').addEventListener('change', async e => {
+  if (S.scanning) return;
+  const all = Array.from(e.target.files || []);
+  const files = all.filter(shouldAttempt);
+  const folderName = files[0]?.webkitRelativePath?.split('/')?.[0] || all[0]?.webkitRelativePath?.split('/')?.[0] || 'Selected Folder';
+  await startScan(files, folderName, { totalFiles:all.length, ignoredFiles:all.length - files.length });
+  e.target.value = '';
+});
+
+const dropZone = $('dropZone');
+['dragenter','dragover'].forEach(type => dropZone.addEventListener(type, e => { e.preventDefault(); dropZone.classList.add('drop-active'); }));
+['dragleave','dragend','drop'].forEach(type => dropZone.addEventListener(type, () => dropZone.classList.remove('drop-active')));
+dropZone.addEventListener('drop', async e => {
+  e.preventDefault();
+  if (S.scanning) return;
+  const items = Array.from(e.dataTransfer.items || []);
+  const discovery = { totalFiles:0, ignoredFiles:0 };
+  try {
+    if (items[0]?.getAsFileSystemHandle) {
+      const handle = await items[0].getAsFileSystemHandle();
+      if (handle.kind === 'directory') {
+        const files = await collectFromHandle(handle, discovery);
+        await startScan(files, handle.name || 'Dropped Folder', discovery);
+        return;
+      }
+    }
+    const entry = items[0]?.webkitGetAsEntry?.();
+    if (entry?.isDirectory) {
+      const files = await readEntryRecursive(entry, discovery);
+      await startScan(files, entry.name || 'Dropped Folder', discovery);
+    } else toast('Please drop a folder, not individual files.');
+  } catch (_) { toast('Could not read dropped folder.'); }
+});
+
+$('cancelBtn').addEventListener('click', () => { S.cancelled = true; });
+$('newScanBtn').addEventListener('click', () => { $('resultsSection').hidden = true; S.results = null; window.scrollTo({ top:0, behavior:'smooth' }); });
+$('saveBtn').addEventListener('click', () => { if (!S.results) return; const scans = getHistory(); scans.unshift(S.results); localStorage.setItem('vrt-history-v7', JSON.stringify(scans.slice(0,20))); renderHistory(); toast('Saved.'); });
+$('clearAllBtn').addEventListener('click', () => { localStorage.removeItem('vrt-history-v7'); renderHistory(); });
+$('csvBtn').addEventListener('click', exportCSV);
+$('copyBtn').addEventListener('click', copySummary);
+
+async function startScan(files, folderName, discovery){
+  S.discovery = discovery;
+  if (!files.length) { toast('No videos or scan candidates found.'); return; }
+  S.scanning = true; S.cancelled = false; S.results = null;
+  $('resultsSection').hidden = true; $('scanSection').hidden = false; $('scanFolder').textContent = folderName;
+  $('progressFill').style.width = '0%'; $('progressFill').classList.remove('done'); $('scanEta').textContent = '';
+  $('scanCount').textContent = `0 / ${files.length} videos`; $('scanFile').textContent = `Found ${discovery.totalFiles} files · scanning ${files.length} · ignored ${discovery.ignoredFiles}`;
+  window.scrollTo({ top:$('scanSection').offsetTop - 20, behavior:'smooth' });
+  const started = Date.now(); let next = 0, processed = 0; const results = [];
+  async function slot(){
+    while (!S.cancelled && next < files.length) {
+      const file = files[next++];
+      $('scanFile').textContent = pathOf(file);
+      const r = await readDuration(file);
+      results.push({ name:pathOf(file), duration:r.success ? r.duration : 0, success:!!r.success, ext:fileExt(file), size:file.size || 0 });
+      processed++;
+      const elapsed = Math.max(.001, (Date.now() - started) / 1000);
+      const eta = Math.round((files.length - processed) / (processed / elapsed));
+      $('progressFill').style.width = Math.round(processed / files.length * 100) + '%';
+      $('scanCount').textContent = `${processed} / ${files.length} videos`;
+      $('scanEta').textContent = processed < files.length ? `ETA: ${formatEta(eta)}` : '';
+    }
   }
-});
-
-el('newScanBtn').addEventListener('click', () => {
-  el('resultsSection').hidden = true;
-  S.results        = null;
-  S.currentHandle  = null;
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-});
-
-// ── History ────────────────────────────────────────────────────────────────
-
-function renderHistory(scans) {
-  const list = el('historyList');
-  list.innerHTML = '';
-
-  if (!scans.length) {
-    list.innerHTML = '<p class="hist-empty">No scans saved yet.</p>';
-    return;
-  }
-
-  scans.forEach(s => {
-    const date = new Date(s.timestamp).toLocaleDateString(undefined, { month:'short', day:'numeric', year:'numeric' });
-    const div  = document.createElement('div');
-    div.className  = 'hist-item';
-    div.dataset.id = s.id;
-    div.innerHTML  = `
-      <div class="hist-info">
-        <div class="hist-folder">${esc(s.folderName)}</div>
-        <div class="hist-meta">${s.fileCount} videos/candidates · ${date}${s.failedCount ? ` · ${s.failedCount} failed` : ''}</div>
-      </div>
-      <div class="hist-dur">${formatTC(s.totalDuration)}</div>
-      <div class="hist-actions">
-        ${s.hasHandle
-          ? `<button class="btn-icon rescan" data-rescan="${s.id}" title="Re-scan this folder">🔄</button>`
-          : ''}
-        <button class="btn-icon" data-del="${s.id}" title="Delete">✕</button>
-      </div>
-    `;
-    list.appendChild(div);
-  });
-
-  // Delete buttons
-  list.querySelectorAll('[data-del]').forEach(btn =>
-    btn.addEventListener('click', () => worker.postMessage({ type: 'delete', id: btn.dataset.del }))
-  );
-
-  // Re-scan buttons
-  list.querySelectorAll('[data-rescan]').forEach(btn =>
-    btn.addEventListener('click', () => rescanEntry(btn.dataset.rescan))
-  );
+  await Promise.all(Array.from({ length:Math.min(TOTAL_CONCURRENCY, files.length) }, slot));
+  S.scanning = false;
+  if (S.cancelled) { $('scanSection').hidden = true; toast('Scan cancelled.'); return; }
+  const totalDuration = results.reduce((s, r) => s + (r.success ? r.duration : 0), 0);
+  const failedCount = results.filter(r => !r.success).length;
+  S.results = { id:'scan_' + Date.now(), folderName, timestamp:Date.now(), totalDuration, fileCount:files.length, failedCount, discovery, files:results };
+  $('progressFill').classList.add('done'); $('progressFill').style.width = '100%'; $('scanEta').textContent = 'Complete'; $('scanFile').textContent = '';
+  showResults();
 }
 
-el('clearAllBtn').addEventListener('click', () => {
-  if (confirm('Clear all scan history? This cannot be undone.'))
-    worker.postMessage({ type: 'clear' });
-});
-
-// ── Re-scan from saved handle ──────────────────────────────────────────────
-
-async function rescanEntry(scanId) {
-  if (S.scanning) { toast('A scan is already in progress.', 'error'); return; }
-
-  const handle = await new Promise(resolve => {
-    S.pendingHandleCb = resolve;
-    worker.postMessage({ type: 'loadHandle', scanId });
-  });
-
-  if (!handle) { toast('No saved folder for this entry.', 'error'); return; }
-
-  let perm = await handle.queryPermission({ mode: 'read' });
-  if (perm !== 'granted') perm = await handle.requestPermission({ mode: 'read' });
-  if (perm !== 'granted') { toast('Folder access denied.', 'error'); return; }
-
-  S.currentHandle = handle;
-  const discovery = { totalFiles: 0, ignoredFiles: 0 };
-  const files = await collectFromHandle(handle, discovery);
-  S.lastDiscovery = discovery;
-  if (!files.length) { toast('No videos or scan candidates found.', 'error'); return; }
-  await launchScanFromFiles(files, handle.name);
+function showResults(){
+  const r = S.results;
+  $('scanSection').hidden = true; $('resultsSection').hidden = false;
+  $('tcValue').textContent = formatTC(r.totalDuration);
+  $('tcSub').textContent = `${r.folderName} · ${r.fileCount} videos/candidates · found ${r.discovery.totalFiles} files, ignored ${r.discovery.ignoredFiles}${r.failedCount ? ' · ' + r.failedCount + ' failed' : ''}`;
+  $('failNotice').innerHTML = r.failedCount ? `<div class="warn">${r.failedCount} file(s) were found but their duration could not be read in the browser. Export CSV to see exact filenames/extensions.</div>` : '';
+  const rows = [...r.files].sort((a,b) => a.name.localeCompare(b.name)).map(f => `<tr><td title="${esc(f.name)}">${esc(f.name)}</td><td class="dur ${f.success ? '' : 'fail'}">${f.success ? formatTC(f.duration) : '—'}</td><td class="${f.success ? '' : 'fail'}">${f.success ? 'ok' : 'failed'}${f.ext ? ' · .' + esc(f.ext) : ''}</td></tr>`).join('');
+  $('fileTableBody').innerHTML = rows;
 }
 
-// ── Formatters ─────────────────────────────────────────────────────────────
-
-function formatTC(secs) {
-  // BUG FIX: pad hours to 2 digits — matches the "00:00:00" HTML placeholder
-  // and prevents a jarring layout shift when hours flips from 9 to 10.
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = Math.floor(secs % 60);
-  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-}
-
-function formatHMS(secs) {
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = Math.floor(secs % 60);
-  return [h && `${h}h`, m && `${m}m`, `${s}s`].filter(Boolean).join(' ');
-}
-
-function formatEta(secs) {
-  if (!isFinite(secs) || secs < 0) return '';
-  if (secs < 60) return `${secs}s`;
-  return `${Math.floor(secs/60)}m ${secs%60}s`;
-}
-
-// ── Utilities ──────────────────────────────────────────────────────────────
-
-function el(id) { return document.getElementById(id); }
-function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-let toastTimer = null;
-function toast(msg, type = '') {
-  const t = el('toast');
-  t.textContent = msg;
-  t.className   = 'show ' + type;
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { t.className = ''; }, 3000);
-}
+function getHistory(){ try { return JSON.parse(localStorage.getItem('vrt-history-v7') || '[]'); } catch { return []; } }
+function renderHistory(){ const scans = getHistory(); $('historyList').innerHTML = scans.length ? scans.map(s => `<div class="hist-item"><div><div class="hist-title">${esc(s.folderName)}</div><div class="hist-meta">${s.fileCount} videos · ${new Date(s.timestamp).toLocaleString()}${s.failedCount ? ' · ' + s.failedCount + ' failed' : ''}</div></div><div class="hist-dur">${formatTC(s.totalDuration)}</div></div>`).join('') : '<p class="muted">No scans saved yet.</p>'; }
+function exportCSV(){ const r = S.results; if (!r) return; const rows = [['Filename','Extension','Size bytes','Duration seconds','Duration H:MM:SS','Status']]; r.files.forEach(f => rows.push([f.name, f.ext, f.size, f.success ? f.duration.toFixed(3) : '', f.success ? formatTC(f.duration) : '', f.success ? 'ok' : 'failed'])); const csv = rows.map(row => row.map(cell => '"' + String(cell ?? '').replace(/"/g,'""') + '"').join(',')).join('\n'); const a = document.createElement('a'); a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv); a.download = `${r.folderName}_runtime.csv`; a.click(); }
+async function copySummary(){ const r = S.results; if (!r) return; const text = `Video Runtime Tracker\nFolder: ${r.folderName}\nRuntime: ${formatTC(r.totalDuration)} (${formatHMS(r.totalDuration)})\nFiles: ${r.fileCount} videos/candidates\nFailed: ${r.failedCount}\nBuild: ${BUILD}`; try { await navigator.clipboard.writeText(text); toast('Copied.'); } catch { toast('Copy failed.'); } }
+function formatTC(secs){ const h=Math.floor(secs/3600), m=Math.floor((secs%3600)/60), s=Math.floor(secs%60); return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
+function formatHMS(secs){ const h=Math.floor(secs/3600), m=Math.floor((secs%3600)/60), s=Math.floor(secs%60); return [h && h+'h', m && m+'m', s+'s'].filter(Boolean).join(' '); }
+function formatEta(secs){ if (!Number.isFinite(secs) || secs < 0) return ''; if (secs < 60) return secs + 's'; return Math.floor(secs/60) + 'm ' + (secs % 60) + 's'; }
+let toastTimer = null; function toast(msg){ const t=$('toast'); t.textContent=msg; t.className='show'; clearTimeout(toastTimer); toastTimer=setTimeout(() => t.className='', 3000); }
 </script>
 </body>
 </html>
