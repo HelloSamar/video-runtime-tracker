@@ -848,19 +848,204 @@ async function startScan(files, folderName) {
   }
 }
 
-// ── Per-file duration ──────────────────────────────────────────────────────
+// ── Duration extraction — 3-tier strategy ─────────────────────────────────
+//
+//  1. Binary parse MP4/MOV  — Blob.slice() only, zero DOM elements,
+//                             reads ≤ 330 KB regardless of file size.
+//  2. Binary parse WebM/MKV — reads ≤ 128 KB.
+//  3. HTMLVideoElement       — fallback for AVI/WMV/FLV/MTS/…
+//                             10 s timeout prevents browser-queue hangs.
+//
+// The video-element approach is why the old version stalled at ~5 files:
+// browsers limit concurrent media-element loaders to 4–8; extras queue
+// silently with neither onloadedmetadata nor onerror ever firing.
 
-function getVideoDuration(file) {
+async function getVideoDuration(file) {
+  const ext  = file.name.split('.').pop().toLowerCase();
+  const mime = file.type.toLowerCase();
+
+  if (['mp4','m4v','mov','m4b','m4p'].includes(ext) ||
+      mime === 'video/mp4' || mime === 'video/quicktime') {
+    const d = await parseDurationMP4(file);
+    if (d !== null && isFinite(d) && d > 0) return { duration: d, success: true };
+  }
+
+  if (['webm','mkv'].includes(ext) ||
+      mime === 'video/webm' || mime === 'video/x-matroska') {
+    const d = await parseDurationWebM(file);
+    if (d !== null && isFinite(d) && d > 0) return { duration: d, success: true };
+  }
+
+  return parseDurationElement(file);
+}
+
+// ── MP4 / MOV binary parser ────────────────────────────────────────────────
+
+async function parseDurationMP4(file) {
+  try {
+    // Faststart files carry moov in the first 64 KB
+    let buf = await file.slice(0, 65536).arrayBuffer();
+    let dur = mp4FindMoov(new DataView(buf));
+    if (dur !== null) return dur;
+
+    // Non-faststart: moov sits at the end — read last 256 KB
+    buf = await file.slice(Math.max(0, file.size - 262144)).arrayBuffer();
+    dur = mp4FindMoov(new DataView(buf));
+    if (dur !== null) return dur;
+
+    // Last resort: byte-level signature scan through that same tail buffer
+    return mp4SigScan(new DataView(buf));
+  } catch { return null; }
+}
+
+function mp4FindMoov(view) {
+  let off = 0;
+  while (off + 8 <= view.byteLength) {
+    let size = view.getUint32(off);
+    const type = str4(view, off + 4);
+    if (size === 1) {                         // extended 64-bit size header
+      if (off + 16 > view.byteLength) break;
+      size = view.getUint32(off + 8) * 0x100000000 + view.getUint32(off + 12);
+    }
+    if (size === 0 || size < 8) break;        // 0 = box runs to EOF; < 8 = corrupt
+    if (type === 'moov')
+      return mp4ReadMvhd(view, off + 8, Math.min(off + size, view.byteLength));
+    off += size;
+  }
+  return null;
+}
+
+function mp4ReadMvhd(view, start, end) {
+  let off = start;
+  end = Math.min(end, view.byteLength);
+  while (off + 8 <= end) {
+    const size = view.getUint32(off);
+    const type = str4(view, off + 4);
+    if (size < 8) break;
+    if (type === 'mvhd') {
+      const ver = view.getUint8(off + 8);
+      // v0: timescale@20, duration@24 (4 bytes each)
+      // v1: timescale@28, duration@32 (8 bytes)
+      if (ver === 0 && off + 28 <= end) {
+        const ts = view.getUint32(off + 20);
+        return ts > 0 ? view.getUint32(off + 24) / ts : null;
+      }
+      if (ver === 1 && off + 40 <= end) {
+        const ts  = view.getUint32(off + 28);
+        const dur = view.getUint32(off + 32) * 0x100000000 + view.getUint32(off + 36);
+        return ts > 0 ? dur / ts : null;
+      }
+    }
+    off += size;
+  }
+  return null;
+}
+
+function mp4SigScan(view) {
+  // Scan byte-by-byte for the ASCII signature 'moov' at bytes +4..+7 of a box
+  for (let i = 0; i + 12 < view.byteLength; i++) {
+    if (str4(view, i + 4) === 'moov') return mp4ReadMvhd(view, i + 8, view.byteLength);
+  }
+  return null;
+}
+
+// ── WebM / MKV binary parser ───────────────────────────────────────────────
+
+async function parseDurationWebM(file) {
+  try {
+    const view = new DataView(await file.slice(0, 131072).arrayBuffer());
+    // Verify EBML magic bytes: 0x1A 0x45 0xDF 0xA3
+    if (view.byteLength < 4 || view.getUint32(0) !== 0x1A45DFA3) return null;
+
+    let off = 0;
+    while (off + 5 < view.byteLength) {
+      const id = ebmlId(view, off);          if (!id) break;
+      const sz = ebmlSz(view, off + id.w);   if (!sz) break;
+      const d  = off + id.w + sz.w;
+      if (id.v === 0x18538067) return webmSegment(view, d); // Segment
+      if (sz.v < 0) break;
+      off = d + sz.v;
+    }
+    return null;
+  } catch { return null; }
+}
+
+function webmSegment(view, off) {
+  while (off + 5 < view.byteLength) {
+    const id = ebmlId(view, off);          if (!id) break;
+    const sz = ebmlSz(view, off + id.w);   if (!sz) break;
+    const d  = off + id.w + sz.w;
+    const end = sz.v >= 0 ? Math.min(d + sz.v, view.byteLength) : view.byteLength;
+    if (id.v === 0x1549A966) return webmInfo(view, d, end); // Info
+    if (id.v === 0x1F43B675) break;                         // Cluster — past Info
+    if (sz.v < 0) { off = d; continue; }
+    off = d + sz.v;
+  }
+  return null;
+}
+
+function webmInfo(view, off, end) {
+  let tcs = 1_000_000, dur = null; // TimecodeScale default: 1 ms in nanoseconds
+  while (off + 3 < end) {
+    const id = ebmlId(view, off);          if (!id) break;
+    const sz = ebmlSz(view, off + id.w);   if (!sz || sz.v < 0) break;
+    const d  = off + id.w + sz.w;
+    if (id.v === 0x2AD7B1 && sz.v <= 8) { // TimecodeScale (big-endian int)
+      let v = 0;
+      for (let i = 0; i < sz.v; i++) v = v * 256 + view.getUint8(d + i);
+      tcs = v;
+    }
+    if (id.v === 0x4489)                   // Duration (float32 or float64)
+      dur = sz.v === 4 ? view.getFloat32(d) : view.getFloat64(d);
+    off = d + sz.v;
+  }
+  return dur !== null ? (dur * tcs) / 1e9 : null;
+}
+
+// EBML variable-length integer helpers
+function ebmlId(view, off) {
+  if (off >= view.byteLength) return null;
+  const b = view.getUint8(off);
+  const w = b&0x80?1 : b&0x40?2 : b&0x20?3 : b&0x10?4 : 0;
+  if (!w || off + w > view.byteLength) return null;
+  let v = b;
+  for (let i = 1; i < w; i++) v = (v << 8) | view.getUint8(off + i);
+  return { v: v >>> 0, w };  // >>> 0 keeps it unsigned
+}
+
+function ebmlSz(view, off) {
+  if (off >= view.byteLength) return null;
+  const b = view.getUint8(off);
+  const w = b&0x80?1 : b&0x40?2 : b&0x20?3 : b&0x10?4 :
+            b&0x08?5 : b&0x04?6 : b&0x02?7 : b&0x01?8 : 0;
+  if (!w || off + w > view.byteLength) return null;
+  if (w > 4) return { v: -1, w };          // oversized — treat as unknown
+  const mask = 0x80 >> (w - 1);
+  let v = b ^ mask;                         // strip marker bit
+  for (let i = 1; i < w; i++) v = v * 256 + view.getUint8(off + i);
+  const allOnes = (1 << (7 * w)) - 1;
+  return { v: v === allOnes ? -1 : v, w }; // -1 = unknown/indefinite size
+}
+
+// ── HTMLVideoElement fallback (AVI, WMV, FLV, MTS, …) ─────────────────────
+
+function parseDurationElement(file) {
   return new Promise(resolve => {
     const url   = URL.createObjectURL(file);
     const video = document.createElement('video');
     video.preload = 'metadata';
 
     const done = (duration, success) => {
+      clearTimeout(t);
+      video.onloadedmetadata = video.onerror = null;
       URL.revokeObjectURL(url);
       video.src = '';
       resolve({ duration, success });
     };
+
+    // 10 s hard timeout — prevents permanent hangs when the browser's
+    // concurrent media-element queue is full (limit is typically 4–8).
+    const t = setTimeout(() => done(0, false), 10000);
 
     video.onloadedmetadata = () => {
       const d = isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
@@ -871,6 +1056,15 @@ function getVideoDuration(file) {
     video.src = url;
     video.load();
   });
+}
+
+// Reads 4 bytes as an ASCII string (MP4 box type helper)
+function str4(view, off) {
+  return off + 4 <= view.byteLength
+    ? String.fromCharCode(
+        view.getUint8(off), view.getUint8(off+1),
+        view.getUint8(off+2), view.getUint8(off+3))
+    : '';
 }
 
 // ── Cancel ─────────────────────────────────────────────────────────────────
