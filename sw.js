@@ -4,13 +4,14 @@
  *
  * GitHub Pages + an older service worker can keep serving the old inline
  * index.html scanner. This version deletes every old VRT cache, takes control
- * immediately, reloads open clients once, and injects vrt-hotfix.js into every
- * HTML navigation response.
+ * immediately, reloads open clients once, and injects the latest hotfix into
+ * every HTML navigation response.
  */
 
-const CACHE = 'vrt-v5';
+const CACHE = 'vrt-v6';
 const PRECACHE = ['./', './index.html', './worker.js', './manifest.json', './icon.svg', './vrt-hotfix.js'];
-const HOTFIX_TAG = '<script src="./vrt-hotfix.js?v=v5"></script>';
+const REFRESH_PARAM = 'v6';
+const HOTFIX_TAG = '<script src="./vrt-hotfix.js?v=v6"></script>';
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -24,16 +25,15 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.map(key => caches.delete(key)));
+    await Promise.all(keys.map(key => key.startsWith('vrt-') ? caches.delete(key) : undefined));
     await caches.open(CACHE).then(cache => cache.addAll(PRECACHE)).catch(() => undefined);
     await self.clients.claim();
 
-    // Force currently-open GitHub Pages tabs to reload once into the new shell.
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     await Promise.all(clients.map(client => {
       const url = new URL(client.url);
-      if (url.searchParams.get('vrt-refresh') === 'v5') return undefined;
-      url.searchParams.set('vrt-refresh', 'v5');
+      if (url.searchParams.get('vrt-refresh') === REFRESH_PARAM) return undefined;
+      url.searchParams.set('vrt-refresh', REFRESH_PARAM);
       return client.navigate(url.toString()).catch(() => undefined);
     }));
   })());
@@ -48,9 +48,8 @@ async function htmlWithHotfix(response) {
   if (!response) return response;
 
   const html = await response.text();
-  const patched = html.includes('vrt-hotfix.js')
-    ? html
-    : html.replace(/<\/body>\s*<\/html>\s*$/i, `  ${HOTFIX_TAG}\n</body>\n</html>`);
+  const withoutOldHotfix = html.replace(/<script\s+src=["'][^"']*vrt-hotfix\.js[^"']*["']\s*><\/script>\s*/ig, '');
+  const patched = withoutOldHotfix.replace(/<\/body>\s*<\/html>\s*$/i, `  ${HOTFIX_TAG}\n</body>\n</html>`);
 
   return new Response(patched, {
     status: response.status,
