@@ -482,7 +482,7 @@
     <div class="btn-row">
       <button class="btn btn-primary" id="fsApiBtn">📁 Choose Folder</button>
       <label class="btn btn-ghost" for="legacyInput">🗂 Legacy Picker</label>
-      <input type="file" id="legacyInput" webkitdirectory directory multiple accept="video/*">
+      <input type="file" id="legacyInput" webkitdirectory directory multiple>
     </div>
     <p class="fsapi-note" id="fsApiNote"></p>
   </div>
@@ -554,8 +554,21 @@
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
+const APP_VERSION = 'vrt-v3';
 const CONCURRENCY = 16;    // parallel video reads
+// Do not rely on File.type. Browsers often leave it blank for local files.
+// The scanner now ignores obvious documents/PDFs and attempts duration reads
+// for every other file, so uncommon video extensions are not silently skipped.
 const VIDEO_MIME = 'video/';
+const VIDEO_EXTS = new Set([
+  '3g2','3gp','asf','avi','divx','dv','f4v','flv','m2ts','m4v','mkv','mod',
+  'mov','mp4','mpe','mpeg','mpg','mts','mxf','ogm','ogv','rm','rmvb','tod',
+  'ts','vob','webm','wm','wmv'
+]);
+const DOCUMENT_EXTS = new Set([
+  'pdf','txt','rtf','doc','docx','odt','pages','xls','xlsx','ods','csv',
+  'ppt','pptx','odp','key','json','xml','html','htm','md','zip','rar','7z'
+]);
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -568,11 +581,12 @@ const S = {
   sortDir:         'asc',
   tableOpen:       false,
   pendingHandleCb: null,       // resolves when worker returns 'handle' msg
+  lastDiscovery:  null,       // { totalFiles, ignoredFiles } for the latest folder enumeration
 };
 
 // ── Worker ─────────────────────────────────────────────────────────────────
 
-const worker = new Worker('./worker.js');
+const worker = new Worker('./worker.js?v=' + APP_VERSION);
 
 worker.onmessage = ({ data }) => {
   switch (data.type) {
@@ -593,7 +607,7 @@ worker.postMessage({ type: 'load' });
 // ── Service Worker ─────────────────────────────────────────────────────────
 
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
+  navigator.serviceWorker.register('./sw.js?v=' + APP_VERSION).catch(() => {});
 }
 
 // ── PWA install ────────────────────────────────────────────────────────────
@@ -657,7 +671,9 @@ dropZone.addEventListener('drop', async e => {
   // Fallback: webkitGetAsEntry
   const entry = items[0]?.webkitGetAsEntry?.();
   if (entry?.isDirectory) {
-    const files = await readEntryRecursive(entry);
+    const discovery = { totalFiles: 0, ignoredFiles: 0 };
+    const files = await readEntryRecursive(entry, discovery);
+    S.lastDiscovery = discovery;
     await launchScanFromFiles(files, null);
   } else {
     toast('Please drop a folder, not individual files.', 'error');
@@ -682,22 +698,60 @@ fsApiBtn.addEventListener('click', async () => {
 document.getElementById('legacyInput').addEventListener('change', async e => {
   if (S.scanning) return;
   const all   = Array.from(e.target.files);
-  const files = all.filter(f => f.type.startsWith(VIDEO_MIME));
-  if (!files.length) { toast('No video files found.', 'error'); return; }
+  const files = all.filter(shouldAttemptDuration);
+  S.lastDiscovery = { totalFiles: all.length, ignoredFiles: all.length - files.length };
+  if (!files.length) { toast('No videos or scan candidates found.', 'error'); return; }
   await launchScanFromFiles(files, null);
   e.target.value = '';
 });
 
+// ── Video detection ───────────────────────────────────────────────────────
+
+function fileExt(file) {
+  const name = (file.name || '').toLowerCase();
+  const dot  = name.lastIndexOf('.');
+  return dot === -1 || dot === name.length - 1 ? '' : name.slice(dot + 1);
+}
+
+function isKnownVideoFile(file) {
+  const mime = (file.type || '').toLowerCase();
+  if (mime.startsWith(VIDEO_MIME)) return true;
+  return VIDEO_EXTS.has(fileExt(file));
+}
+
+function shouldAttemptDuration(file) {
+  const ext  = fileExt(file);
+  const mime = (file.type || '').toLowerCase();
+  const name = (file.name || '').toLowerCase();
+
+  // Keep PDFs and obvious non-video documents out of the scan.
+  if (mime === 'application/pdf' || DOCUMENT_EXTS.has(ext)) return false;
+
+  // Always scan known videos.
+  if (isKnownVideoFile(file)) return true;
+
+  // Critical fallback: many local videos have blank or generic MIME and may use
+  // uncommon extensions. Attempt metadata extraction instead of skipping them.
+  if (!mime || mime === 'application/octet-stream') return true;
+
+  // Some OS/browser combinations provide generic binary MIME strings.
+  if (mime.startsWith('application/')) return true;
+
+  return false;
+}
+
 // ── Collect files from FSAPI handle ───────────────────────────────────────
 
-async function collectFromHandle(dirHandle) {
+async function collectFromHandle(dirHandle, discovery = null) {
   const files = [];
   for await (const [, entry] of dirHandle.entries()) {
     if (entry.kind === 'file') {
       const f = await entry.getFile();
-      if (f.type.startsWith(VIDEO_MIME)) files.push(f);
+      if (discovery) discovery.totalFiles++;
+      if (shouldAttemptDuration(f)) files.push(f);
+      else if (discovery) discovery.ignoredFiles++;
     } else if (entry.kind === 'directory') {
-      files.push(...await collectFromHandle(entry)); // recurse
+      files.push(...await collectFromHandle(entry, discovery)); // recurse
     }
   }
   return files;
@@ -706,11 +760,15 @@ async function collectFromHandle(dirHandle) {
 // Collect from webkitGetAsEntry (drag-drop fallback)
 // BUG FIXES: (1) readEntries() returns max 100 per call — must loop until empty batch
 //            (2) added error callbacks so a bad entry never hangs the Promise
-function readEntryRecursive(entry) {
+function readEntryRecursive(entry, discovery = null) {
   return new Promise(resolve => {
     if (entry.isFile) {
       entry.file(
-        f  => resolve(f.type.startsWith(VIDEO_MIME) ? [f] : []),
+        f  => {
+          if (discovery) discovery.totalFiles++;
+          if (shouldAttemptDuration(f)) resolve([f]);
+          else { if (discovery) discovery.ignoredFiles++; resolve([]); }
+        },
         () => resolve([])   // file access error — skip silently
       );
     } else if (entry.isDirectory) {
@@ -721,7 +779,7 @@ function readEntryRecursive(entry) {
           if (!batch.length) {
             // All batches consumed — recurse into each entry
             const results = [];
-            for (const e of all) results.push(...await readEntryRecursive(e));
+            for (const e of all) results.push(...await readEntryRecursive(e, discovery));
             resolve(results);
           } else {
             all.push(...batch);
@@ -739,8 +797,10 @@ function readEntryRecursive(entry) {
 // ── Scan launchers ─────────────────────────────────────────────────────────
 
 async function launchScanFromHandle(dirHandle) {
-  const files = await collectFromHandle(dirHandle);
-  if (!files.length) { toast('No video files found in that folder.', 'error'); return; }
+  const discovery = { totalFiles: 0, ignoredFiles: 0 };
+  const files = await collectFromHandle(dirHandle, discovery);
+  S.lastDiscovery = discovery;
+  if (!files.length) { toast('No videos or scan candidates found in that folder.', 'error'); return; }
   S.currentHandle = dirHandle;
   await launchScanFromFiles(files, dirHandle.name);
 }
@@ -770,8 +830,10 @@ async function startScan(files, folderName) {
   el('progressFill').style.width = '0%';
   el('progressFill').classList.remove('done');
   el('scanEta').textContent  = '';
-  el('scanCount').textContent = `0 / ${files.length} files`;
-  el('scanFile').textContent  = '';
+  el('scanCount').textContent = `0 / ${files.length} videos`;
+  el('scanFile').textContent  = S.lastDiscovery
+    ? `Found ${S.lastDiscovery.totalFiles} files · scanning ${files.length} · ignored ${S.lastDiscovery.ignoredFiles}`
+    : '';
   window.scrollTo({ top: el('scanSection').offsetTop - 20, behavior: 'smooth' });
 
   S.ac = new AbortController();
@@ -805,7 +867,7 @@ async function startScan(files, folderName) {
 
         el('scanFile').textContent     = processed < files.length ? file.name : '';
         el('progressFill').style.width = pct + '%';
-        el('scanCount').textContent    = `${processed} / ${files.length} files`;
+        el('scanCount').textContent    = `${processed} / ${files.length} videos`;
         el('scanEta').textContent      = processed < files.length
           ? `ETA: ${formatEta(eta)}` : '';
       }
@@ -825,6 +887,7 @@ async function startScan(files, folderName) {
       fileCount:     files.length,
       failedCount:   failed,
       hasHandle:     !!S.currentHandle,
+      discovery:      S.lastDiscovery,
       files:         fileResults,
     };
 
@@ -1080,9 +1143,13 @@ function showResults() {
   if (!r) return;
 
   el('tcValue').textContent = formatTC(r.totalDuration);
+  const discoveryText = r.discovery
+    ? ` · found ${r.discovery.totalFiles} files, ignored ${r.discovery.ignoredFiles}`
+    : '';
   el('tcSub').textContent   =
-    `${r.folderName} · ${r.fileCount} file${r.fileCount !== 1 ? 's' : ''}` +
-    (r.failedCount ? ` · ${r.failedCount} skipped` : '');
+    `${r.folderName} · ${r.fileCount} videos/candidates` +
+    discoveryText +
+    (r.failedCount ? ` · ${r.failedCount} failed` : '');
 
   el('scanSection').hidden    = true;
   el('resultsSection').hidden = false;
@@ -1098,7 +1165,7 @@ function showResults() {
   S.tableOpen = false;
   el('tableToggle').classList.remove('open');
   el('fileTableWrap').classList.remove('open');
-  el('tableToggleLabel').textContent = `Show file list (${r.fileCount} files)`;
+  el('tableToggleLabel').textContent = `Show video list (${r.fileCount})`;
   updateTableHeaders();
   renderFileTable();
 
@@ -1188,7 +1255,7 @@ el('csvBtn').addEventListener('click', () => {
 el('copyBtn').addEventListener('click', async () => {
   const r = S.results;
   if (!r) return;
-  const text = `Video Runtime Tracker\n📁 ${r.folderName}\n⏱ ${formatTC(r.totalDuration)}  (${formatHMS(r.totalDuration)})\n📄 ${r.fileCount} files${r.failedCount ? `, ${r.failedCount} skipped` : ''}\n🕐 Scanned ${new Date(r.timestamp).toLocaleString()}`;
+  const text = `Video Runtime Tracker\n📁 ${r.folderName}\n⏱ ${formatTC(r.totalDuration)}  (${formatHMS(r.totalDuration)})\n📄 ${r.fileCount} videos/candidates${r.failedCount ? `, ${r.failedCount} failed` : ''}\n🕐 Scanned ${new Date(r.timestamp).toLocaleString()}`;
   try {
     await navigator.clipboard.writeText(text);
     toast('Copied to clipboard!', 'success');
@@ -1223,7 +1290,7 @@ function renderHistory(scans) {
     div.innerHTML  = `
       <div class="hist-info">
         <div class="hist-folder">${esc(s.folderName)}</div>
-        <div class="hist-meta">${s.fileCount} files · ${date}${s.failedCount ? ` · ${s.failedCount} skipped` : ''}</div>
+        <div class="hist-meta">${s.fileCount} videos/candidates · ${date}${s.failedCount ? ` · ${s.failedCount} failed` : ''}</div>
       </div>
       <div class="hist-dur">${formatTC(s.totalDuration)}</div>
       <div class="hist-actions">
@@ -1269,8 +1336,10 @@ async function rescanEntry(scanId) {
   if (perm !== 'granted') { toast('Folder access denied.', 'error'); return; }
 
   S.currentHandle = handle;
-  const files = await collectFromHandle(handle);
-  if (!files.length) { toast('No video files found.', 'error'); return; }
+  const discovery = { totalFiles: 0, ignoredFiles: 0 };
+  const files = await collectFromHandle(handle, discovery);
+  S.lastDiscovery = discovery;
+  if (!files.length) { toast('No videos or scan candidates found.', 'error'); return; }
   await launchScanFromFiles(files, handle.name);
 }
 
