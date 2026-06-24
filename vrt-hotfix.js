@@ -1,20 +1,20 @@
 /**
- * VRT hotfix v6: robust local-video discovery and duration extraction.
+ * VRT hotfix v8-fast: speed-first local video duration extraction.
  *
- * The folder scanner may correctly find all video files, while Chrome still
- * fails metadata reads for many containers/codecs. This file adds lightweight
- * binary duration readers before falling back to HTMLVideoElement.
+ * v7 was deliberately conservative and waited up to 45s for browser metadata.
+ * v8 keeps the broad file detection, but caps slow fallbacks so failed files do
+ * not make a folder scan feel stuck.
  */
 (() => {
   'use strict';
 
-  const HOTFIX_VERSION = 'vrt-hotfix-2026-06-24-v6';
+  const HOTFIX_VERSION = 'vrt-hotfix-2026-06-24-v8-fast';
   if (window.__VRT_HOTFIX_VERSION__ === HOTFIX_VERSION) return;
   window.__VRT_HOTFIX_VERSION__ = HOTFIX_VERSION;
 
-  const TOTAL_CONCURRENCY = 4;
-  const ELEMENT_CONCURRENCY = 1;
-  const ELEMENT_TIMEOUT_MS = 45000;
+  const TOTAL_CONCURRENCY = 8;
+  const ELEMENT_CONCURRENCY = 4;
+  const ELEMENT_TIMEOUT_MS = 3000;
   const MB = 1024 * 1024;
   const VIDEO_MIME = 'video/';
   const VIDEO_EXTS = new Set([
@@ -26,6 +26,14 @@
     'pdf','txt','rtf','doc','docx','odt','pages','xls','xlsx','ods','csv',
     'ppt','pptx','odp','key','json','xml','html','htm','md','zip','rar','7z'
   ]);
+
+  window.__VRT_FAST_CONFIG__ = {
+    version: HOTFIX_VERSION,
+    totalConcurrency: TOTAL_CONCURRENCY,
+    elementConcurrency: ELEMENT_CONCURRENCY,
+    elementTimeoutMs: ELEMENT_TIMEOUT_MS,
+    mode: 'fast'
+  };
 
   function extOf(file) {
     const name = (file?.name || '').toLowerCase();
@@ -41,10 +49,8 @@
   function shouldAttemptDurationHotfix(file) {
     const ext = extOf(file);
     const mime = (file?.type || '').toLowerCase();
-
     if (isKnownVideoFileHotfix(file)) return true;
     if (mime === 'application/pdf' || DOCUMENT_EXTS.has(ext)) return false;
-
     return !mime || mime === 'application/octet-stream' || mime.startsWith('application/');
   }
 
@@ -70,7 +76,6 @@
   function readEntryRecursiveHotfix(entry, discovery = null) {
     return new Promise(resolve => {
       if (!entry) { resolve([]); return; }
-
       if (entry.isFile) {
         entry.file(
           file => {
@@ -82,9 +87,7 @@
         );
         return;
       }
-
       if (!entry.isDirectory) { resolve([]); return; }
-
       const reader = entry.createReader();
       const entries = [];
       const readBatch = () => {
@@ -106,17 +109,13 @@
   function createLimiter(max) {
     const queue = [];
     let active = 0;
-
     function pump() {
       while (active < max && queue.length) {
         const task = queue.shift();
         active++;
-        task.run()
-          .then(task.resolve, task.reject)
-          .finally(() => { active--; pump(); });
+        task.run().then(task.resolve, task.reject).finally(() => { active--; pump(); });
       }
     }
-
     return run => new Promise((resolve, reject) => {
       queue.push({ run, resolve, reject });
       pump();
@@ -137,8 +136,7 @@
   function findAscii(view, text, start = 0) {
     const first = text.charCodeAt(0);
     for (let i = Math.max(0, start); i <= view.byteLength - text.length; i++) {
-      if (view.getUint8(i) !== first) continue;
-      if (asciiAt(view, i, text)) return i;
+      if (view.getUint8(i) === first && asciiAt(view, i, text)) return i;
     }
     return -1;
   }
@@ -160,10 +158,8 @@
   function parseMvhdAt(view, typeOff) {
     const boxStart = typeOff - 4;
     if (boxStart < 0 || boxStart + 32 > view.byteLength) return null;
-
     const boxSize = view.getUint32(boxStart);
     if (boxSize < 32 && boxSize !== 1) return null;
-
     const version = view.getUint8(boxStart + 8);
     if (version === 0) {
       if (boxStart + 28 > view.byteLength) return null;
@@ -171,14 +167,12 @@
       const duration = view.getUint32(boxStart + 24);
       return timescale > 0 && duration > 0 ? duration / timescale : null;
     }
-
     if (version === 1) {
       if (boxStart + 40 > view.byteLength) return null;
       const timescale = view.getUint32(boxStart + 28);
       const duration = getUint64BE(view, boxStart + 32);
       return timescale > 0 && duration > 0 ? duration / timescale : null;
     }
-
     return null;
   }
 
@@ -195,12 +189,10 @@
   async function parseDurationMP4Hotfix(file) {
     try {
       const ranges = [
-        [0, Math.min(file.size, 8 * MB)],
-        [Math.max(0, file.size - 64 * MB), Math.min(file.size, 64 * MB)],
+        [0, Math.min(file.size, 2 * MB)],
+        [Math.max(0, file.size - 8 * MB), Math.min(file.size, 8 * MB)],
       ];
-
-      if (file.size <= 128 * MB) ranges.push([0, file.size]);
-
+      if (file.size <= 16 * MB) ranges.push([0, file.size]);
       for (const [start, length] of ranges) {
         const duration = scanMP4View(await readRange(file, start, length));
         if (duration) return duration;
@@ -236,13 +228,11 @@
   function parseWebMInfo(view, off, end) {
     let timecodeScale = 1000000;
     let duration = null;
-
     while (off + 3 < end) {
       const id = ebmlId(view, off); if (!id) break;
       const size = ebmlSize(view, off + id.w); if (!size || size.v < 0) break;
       const data = off + id.w + size.w;
       if (data + size.v > view.byteLength) break;
-
       if (id.v === 0x2AD7B1 && size.v <= 8) {
         let v = 0;
         for (let i = 0; i < size.v; i++) v = v * 256 + view.getUint8(data + i);
@@ -253,7 +243,6 @@
       }
       off = data + size.v;
     }
-
     return duration !== null && duration > 0 ? (duration * timecodeScale) / 1e9 : null;
   }
 
@@ -264,10 +253,8 @@
       const size = ebmlSize(view, off + id.w); if (!size) break;
       const data = off + id.w + size.w;
       const end = size.v >= 0 ? Math.min(data + size.v, view.byteLength) : view.byteLength;
-
       if (id.v === 0x1549A966) return parseWebMInfo(view, data, end);
       if (id.v === 0x1F43B675) break;
-
       off = size.v >= 0 ? data + size.v : data;
     }
     return null;
@@ -275,15 +262,13 @@
 
   async function parseDurationWebMHotfix(file) {
     try {
-      const view = await readRange(file, 0, Math.min(file.size, 8 * MB));
+      const view = await readRange(file, 0, Math.min(file.size, 2 * MB));
       if (view.byteLength < 4 || view.getUint32(0) !== 0x1A45DFA3) return null;
-
       let off = 0;
       while (off + 5 < view.byteLength) {
         const id = ebmlId(view, off); if (!id) break;
         const size = ebmlSize(view, off + id.w); if (!size) break;
         const data = off + id.w + size.w;
-
         if (id.v === 0x18538067) {
           const duration = scanWebMView(new DataView(view.buffer, data, view.byteLength - data));
           if (duration) return duration;
@@ -295,15 +280,14 @@
   }
 
   function detectTSPacket(view) {
-    const packetSizes = [188, 192, 204];
-    for (const packetSize of packetSizes) {
+    for (const packetSize of [188, 192, 204]) {
       for (let start = 0; start < packetSize && start < view.byteLength; start++) {
         let hits = 0;
-        for (let n = 0; n < 6; n++) {
+        for (let n = 0; n < 5; n++) {
           const pos = start + n * packetSize;
           if (pos < view.byteLength && view.getUint8(pos) === 0x47) hits++;
         }
-        if (hits >= 5) return { packetSize, syncOffset: start };
+        if (hits >= 4) return { packetSize, syncOffset: start };
       }
     }
     return null;
@@ -315,9 +299,7 @@
     if (afc !== 2 && afc !== 3) return null;
     const afl = view.getUint8(packetStart + 4);
     if (afl < 7 || packetStart + 5 + afl > view.byteLength) return null;
-    const flags = view.getUint8(packetStart + 5);
-    if (!(flags & 0x10)) return null;
-
+    if (!(view.getUint8(packetStart + 5) & 0x10)) return null;
     const b0 = view.getUint8(packetStart + 6);
     const b1 = view.getUint8(packetStart + 7);
     const b2 = view.getUint8(packetStart + 8);
@@ -326,17 +308,17 @@
     return b0 * 0x2000000 + (b1 << 17) + (b2 << 9) + (b3 << 1) + (b4 >> 7);
   }
 
-  function firstPCR(view, packetInfo) {
-    for (let pos = packetInfo.syncOffset; pos + packetInfo.packetSize <= view.byteLength; pos += packetInfo.packetSize) {
+  function firstPCR(view, info) {
+    for (let pos = info.syncOffset; pos + info.packetSize <= view.byteLength; pos += info.packetSize) {
       const pcr = pcrAt(view, pos);
       if (pcr !== null) return pcr;
     }
     return null;
   }
 
-  function lastPCR(view, packetInfo) {
-    const lastStart = packetInfo.syncOffset + Math.floor((view.byteLength - packetInfo.syncOffset - 1) / packetInfo.packetSize) * packetInfo.packetSize;
-    for (let pos = lastStart; pos >= packetInfo.syncOffset; pos -= packetInfo.packetSize) {
+  function lastPCR(view, info) {
+    const lastStart = info.syncOffset + Math.floor((view.byteLength - info.syncOffset - 1) / info.packetSize) * info.packetSize;
+    for (let pos = lastStart; pos >= info.syncOffset; pos -= info.packetSize) {
       const pcr = pcrAt(view, pos);
       if (pcr !== null) return pcr;
     }
@@ -345,19 +327,16 @@
 
   async function parseDurationTSHotfix(file) {
     try {
-      const head = await readRange(file, 0, Math.min(file.size, 8 * MB));
-      const packetInfo = detectTSPacket(head);
-      if (!packetInfo) return null;
-      const first = firstPCR(head, packetInfo);
+      const head = await readRange(file, 0, Math.min(file.size, 2 * MB));
+      const info = detectTSPacket(head);
+      if (!info) return null;
+      const first = firstPCR(head, info);
       if (first === null) return null;
-
-      const tailStart = Math.max(0, file.size - 8 * MB);
-      const tail = await readRange(file, tailStart, Math.min(file.size, 8 * MB));
-      const tailInfo = detectTSPacket(tail) || packetInfo;
+      const tail = await readRange(file, Math.max(0, file.size - 2 * MB), Math.min(file.size, 2 * MB));
+      const tailInfo = detectTSPacket(tail) || info;
       let last = lastPCR(tail, tailInfo);
       if (last === null) return null;
-
-      if (last < first) last += 0x200000000; // 33-bit PCR wraparound.
+      if (last < first) last += 0x200000000;
       const duration = (last - first) / 90000;
       return duration > 0 && Number.isFinite(duration) ? duration : null;
     } catch (_) {}
@@ -366,16 +345,14 @@
 
   async function parseDurationAVIHotfix(file) {
     try {
-      const view = await readRange(file, 0, Math.min(file.size, 4 * MB));
+      const view = await readRange(file, 0, Math.min(file.size, 1 * MB));
       if (!asciiAt(view, 0, 'RIFF') || !asciiAt(view, 8, 'AVI ')) return null;
       const avih = findAscii(view, 'avih');
       if (avih < 8 || avih + 32 > view.byteLength) return null;
       const data = avih + 4;
       const microSecPerFrame = view.getUint32(data + 4, true);
       const totalFrames = view.getUint32(data + 20, true);
-      const duration = microSecPerFrame > 0 && totalFrames > 0
-        ? (microSecPerFrame * totalFrames) / 1000000
-        : null;
+      const duration = microSecPerFrame > 0 && totalFrames > 0 ? (microSecPerFrame * totalFrames) / 1000000 : null;
       return duration && Number.isFinite(duration) ? duration : null;
     } catch (_) {}
     return null;
@@ -386,9 +363,7 @@
   function findBytes(view, bytes, start = 0) {
     for (let i = start; i <= view.byteLength - bytes.length; i++) {
       let ok = true;
-      for (let j = 0; j < bytes.length; j++) {
-        if (view.getUint8(i + j) !== bytes[j]) { ok = false; break; }
-      }
+      for (let j = 0; j < bytes.length; j++) if (view.getUint8(i + j) !== bytes[j]) { ok = false; break; }
       if (ok) return i;
     }
     return -1;
@@ -396,7 +371,7 @@
 
   async function parseDurationASFHotfix(file) {
     try {
-      const view = await readRange(file, 0, Math.min(file.size, 2 * MB));
+      const view = await readRange(file, 0, Math.min(file.size, 1 * MB));
       const off = findBytes(view, ASF_FILE_PROPS_GUID);
       if (off < 0 || off + 88 > view.byteLength) return null;
       const playDuration100ns = getUint64LE(view, off + 64);
@@ -409,7 +384,7 @@
 
   async function parseDurationFLVHotfix(file) {
     try {
-      const view = await readRange(file, 0, Math.min(file.size, 2 * MB));
+      const view = await readRange(file, 0, Math.min(file.size, 1 * MB));
       if (!asciiAt(view, 0, 'FLV')) return null;
       let off = findAscii(view, 'duration');
       while (off !== -1) {
@@ -430,11 +405,9 @@
       const url = URL.createObjectURL(file);
       const video = document.createElement('video');
       let settled = false;
-
       video.preload = 'metadata';
       video.muted = true;
       video.playsInline = true;
-
       const done = (duration, success) => {
         if (settled) return;
         settled = true;
@@ -445,14 +418,12 @@
         video.removeAttribute('src');
         try { video.load(); } catch (_) {}
         URL.revokeObjectURL(url);
-        resolve({ duration, success });
+        resolve({ duration, success, mode: success ? 'browser' : 'timeout' });
       };
-
       const readDuration = () => {
         const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
         if (duration > 0) done(duration, true);
       };
-
       const timer = setTimeout(() => done(0, false), ELEMENT_TIMEOUT_MS);
       video.onloadedmetadata = readDuration;
       video.ondurationchange = readDuration;
@@ -469,32 +440,27 @@
 
     if (['mp4','m4v','mov','m4b','m4p','f4v','3gp','3g2'].includes(ext) || mime === 'video/mp4' || mime === 'video/quicktime') {
       duration = await parseDurationMP4Hotfix(file);
-      if (duration) return { duration, success: true };
+      if (duration) return { duration, success: true, mode: 'mp4' };
     }
-
     if (['webm','mkv'].includes(ext) || mime === 'video/webm' || mime === 'video/x-matroska') {
       duration = await parseDurationWebMHotfix(file);
-      if (duration) return { duration, success: true };
+      if (duration) return { duration, success: true, mode: 'webm' };
     }
-
     if (['ts','mts','m2ts','tod','mod'].includes(ext)) {
       duration = await parseDurationTSHotfix(file);
-      if (duration) return { duration, success: true };
+      if (duration) return { duration, success: true, mode: 'ts' };
     }
-
     if (['avi','divx'].includes(ext)) {
       duration = await parseDurationAVIHotfix(file);
-      if (duration) return { duration, success: true };
+      if (duration) return { duration, success: true, mode: 'avi' };
     }
-
     if (['asf','wmv','wm'].includes(ext)) {
       duration = await parseDurationASFHotfix(file);
-      if (duration) return { duration, success: true };
+      if (duration) return { duration, success: true, mode: 'asf' };
     }
-
-    if (['flv'].includes(ext)) {
+    if (ext === 'flv') {
       duration = await parseDurationFLVHotfix(file);
-      if (duration) return { duration, success: true };
+      if (duration) return { duration, success: true, mode: 'flv' };
     }
 
     return withElementSlot(() => parseDurationElementHotfix(file));
