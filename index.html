@@ -377,11 +377,17 @@ async function miDuration(file) {
 
   /* 3. Analyse the file with a per-file timeout */
   try {
+let totalRead = 0;
+    const READ_BUDGET = 12 * 1024 * 1024; // 12 MB — enough for MP4/MKV/AVI/WMV headers
+
     const result = await Promise.race([
       mi.analyzeData(
         () => file.size,
-        async (size, offset) =>
-          new Uint8Array(await file.slice(offset, offset + size).arrayBuffer())
+        async (size, offset) => {
+          totalRead += size;
+          if (totalRead > READ_BUDGET) throw new Error('read-budget-exceeded');
+          return new Uint8Array(await file.slice(offset, offset + size).arrayBuffer());
+        }
       ),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('mi-analysis-timeout')), MI_FILE_TO)
