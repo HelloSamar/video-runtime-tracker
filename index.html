@@ -1,918 +1,180 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0e1016">
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
-<title>VRT — Video Runtime Tracker</title>
-<style>
-:root{
-  --bg:#0e1016;--card:#161b27;--hi:#1d2437;--bd:#28334a;
-  --txt:#dde3f0;--dim:#7e8da8;--acc:#4b7bec;--gold:#f5c842;
-  --green:#2ecc8a;--red:#f04b4b;
-  --mono:ui-monospace,'Cascadia Code','Fira Code',monospace;
-  --sans:system-ui,-apple-system,'Segoe UI',sans-serif;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--sans);background:var(--bg);color:var(--txt);padding:28px 14px 80px;line-height:1.5}
-#app{max-width:860px;margin:auto;display:flex;flex-direction:column;gap:16px}
-
-/* ── header ── */
-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.logo{display:flex;align-items:center;gap:12px}
-.logo img{width:42px;height:42px}
-h1{font-size:20px;line-height:1.2}
-.ver{font:11px var(--mono);color:var(--green);border:1px solid rgba(46,204,138,.35);
-     border-radius:99px;padding:5px 11px;white-space:nowrap}
-.dim{font-size:12px;color:var(--dim)}
-
-/* ── cards ── */
-.card,#drop{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:22px}
-[hidden]{display:none!important}
-
-/* ── drop zone ── */
-#drop{text-align:center;border-style:dashed;transition:.15s border-color,background .15s}
-#drop:hover,.drop-active{border-color:var(--acc);background:rgba(75,123,236,.1)}
-.drop-icon{font-size:40px;margin-bottom:10px}
-.drop-title{font-weight:700;margin-bottom:6px}
-.btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:16px}
-#legacy{display:none}
-
-/* ── buttons ── */
-.btn{padding:9px 16px;border:1px solid var(--bd);border-radius:8px;font-weight:700;
-     cursor:pointer;background:var(--hi);color:var(--txt);font-size:14px;transition:.1s background}
-.btn:hover{background:#243050}
-.btn.primary{background:var(--acc);border:none;color:#fff}
-.btn.primary:hover{background:#5b8af5}
-.btn.danger{background:rgba(240,75,75,.12);color:var(--red);border-color:rgba(240,75,75,.3)}
-.btn.danger:hover{background:rgba(240,75,75,.2)}
-.btn.sm{padding:5px 10px;font-size:12px}
-
-/* ── scan progress ── */
-#scan .scan-head{display:flex;justify-content:space-between;gap:10px;margin-bottom:12px;align-items:center}
-.bar{height:8px;background:var(--hi);border-radius:99px;overflow:hidden;margin-bottom:8px}
-.fill{height:100%;width:0;background:linear-gradient(90deg,#4b7bec,#6d95ff);transition:width .2s}
-.fill.done{background:linear-gradient(90deg,var(--green),#5fedb0)}
-.scan-meta{display:flex;justify-content:space-between;font-size:12px;color:var(--dim)}
-#scanFile{font:11px var(--mono);color:var(--dim);min-height:16px;margin-top:8px;
-          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-
-/* ── stats strip ── */
-.stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
-.stat{background:var(--hi);border:1px solid var(--bd);border-radius:8px;
-      padding:10px 14px;text-align:center;flex:1;min-width:90px}
-.stat-val{font:700 20px var(--mono);color:var(--gold)}
-.stat-val.red{color:var(--red)}
-.stat-val.green{color:var(--green)}
-.stat-lbl{font-size:11px;color:var(--dim);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
-
-/* ── total runtime display ── */
-.tc-box{background:rgba(245,200,66,.07);border:1px solid rgba(245,200,66,.28);
-        border-radius:12px;text-align:center;padding:22px;margin-bottom:14px}
-.tc-val{font:700 clamp(36px,10vw,58px) var(--mono);color:var(--gold);letter-spacing:3px;line-height:1.1}
-.tc-sub{font-size:12px;color:var(--dim);margin-top:6px}
-
-/* ── notices ── */
-.warn{padding:10px 13px;border-radius:8px;background:rgba(240,75,75,.1);color:var(--red);font-size:13px;margin-bottom:10px}
-.ok-msg{padding:10px 13px;border-radius:8px;background:rgba(46,204,138,.08);color:var(--green);font-size:13px;margin-bottom:10px}
-
-/* ── table ── */
-.tbl-wrap{overflow-x:auto;margin-top:12px;border-radius:8px;border:1px solid var(--bd)}
-table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px}
-td,th{border-bottom:1px solid var(--bd);padding:7px 10px;text-align:left;vertical-align:top}
-tr:last-child td{border-bottom:none}
-th{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;background:var(--hi);font-weight:600}
-td.dur{text-align:right;font-family:var(--mono);color:var(--gold);white-space:nowrap}
-td.fail{color:var(--red)}
-td.ok-cell{color:var(--green)}
-td.r{text-align:right}
-td.sm{font-size:11px;font-family:var(--mono)}
-td.mono{font-family:var(--mono)}
-.filename{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
-/* ── history ── */
-.hist-row{display:flex;justify-content:space-between;gap:10px;margin-top:10px;align-items:center}
-
-/* ── toast ── */
-#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--hi);
-       border:1px solid var(--bd);border-radius:99px;padding:10px 20px;opacity:0;
-       transition:opacity .2s;pointer-events:none;z-index:99}
-#toast.show{opacity:1}
-
-/* ── mi status ── */
-#miStatus{font:11px var(--mono);color:var(--dim);margin-top:8px;min-height:14px}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="WiseQuiz vocabulary flashcards for OWS, idioms, synonyms, and antonyms.">
+  <meta name="theme-color" content="#1d4ed8" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a"  media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>WiseQuiz</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>  <!-- defer: head placement = earlier download, same late execution -->
+  <script>
+    /* Register service worker — gives offline support + install-to-home-screen */
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .catch((err) => console.warn('SW registration failed:', err));
+      });
+    }
+  </script>
 </head>
 <body>
-<div id="app">
 
-  <!-- HEADER -->
-  <header>
-    <div class="logo">
-      <img src="icon.svg" alt="VRT">
-      <div>
-        <h1>Video Runtime Tracker</h1>
-        <p class="dim">Local folder scan — no uploads, no server.</p>
-      </div>
+<a class="skip-link" href="#mainContent">Skip to content</a>
+
+<div class="phone-shell">
+
+  <!-- ── Top bar ──────────────────────────────── -->
+  <header class="app-topbar">
+    <a class="brand" href="#" data-action="home" aria-label="WiseQuiz home">
+      <span class="brand-word">Wise<span>Quiz</span></span>
+    </a>
+    <div class="top-actions" role="toolbar" aria-label="App controls">
+      <button class="icon-btn" id="exportBtn" type="button" title="Export progress">⇩</button>
+      <label  class="icon-btn file-btn" for="importInput" title="Import progress">⇧</label>
+      <input  id="importInput" type="file" accept="application/json,.json" hidden>
+      <button class="icon-btn danger" id="resetBtn" type="button" title="Reset progress">↺</button>
     </div>
-    <span class="ver" id="versionBadge">v10 stable</span>
   </header>
 
-  <!-- DROP ZONE -->
-  <div id="drop">
-    <div class="drop-icon">📂</div>
-    <div class="drop-title">Drop a video folder here</div>
-    <p class="dim">or choose one below</p>
-    <div class="btn-row">
-      <button class="btn primary" id="btnChoose">📁 Choose Folder</button>
-      <label class="btn" for="legacy">🗂 Legacy Picker</label>
-      <input type="file" id="legacy" webkitdirectory directory multiple>
-    </div>
-    <p class="dim" id="note" style="margin-top:10px"></p>
-    <p id="miStatus"></p>
-  </div>
-
-  <!-- SCAN PROGRESS -->
-  <section class="card" id="scan" hidden>
-    <div class="scan-head">
-      <b id="folder">Scanning…</b>
-      <button class="btn danger" id="btnCancel">✕ Cancel</button>
-    </div>
-    <div class="bar"><div class="fill" id="fill"></div></div>
-    <div class="scan-meta">
-      <span id="count">0 / 0</span>
-      <span id="eta"></span>
-    </div>
-    <div id="scanFile"></div>
-  </section>
-
-  <!-- RESULTS -->
-  <section class="card" id="results" hidden>
-
-    <div class="tc-box">
-      <div class="dim">Total Runtime</div>
-      <div class="tc-val" id="total">00:00:00</div>
-      <div class="tc-sub" id="sub"></div>
-    </div>
-
-    <!-- Stats strip -->
-    <div class="stats">
-      <div class="stat"><div class="stat-val" id="stTotal">—</div><div class="stat-lbl">Total Files</div></div>
-      <div class="stat"><div class="stat-val" id="stCand">—</div><div class="stat-lbl">Candidates</div></div>
-      <div class="stat"><div class="stat-val" id="stIgn">—</div><div class="stat-lbl">Ignored</div></div>
-      <div class="stat"><div class="stat-val green" id="stOk">—</div><div class="stat-lbl">Succeeded</div></div>
-      <div class="stat"><div class="stat-val red" id="stFail">—</div><div class="stat-lbl">Failed</div></div>
-      <div class="stat"><div class="stat-val" id="stTime">—</div><div class="stat-lbl">Scan Time</div></div>
-    </div>
-
-    <div id="notice"></div>
-
-    <div class="btn-row" style="justify-content:flex-start;flex-wrap:wrap">
-      <button class="btn primary" id="btnSave">💾 Save</button>
-      <button class="btn" id="btnCSV">⬇ Export CSV</button>
-      <button class="btn" id="btnCopy">📋 Copy Summary</button>
-      <button class="btn" id="btnNew">🔄 New Scan</button>
-    </div>
-
-    <!-- Per-file table -->
-    <div class="tbl-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Filename</th>
-            <th>Ext</th>
-            <th class="r">Size</th>
-            <th class="r">Duration</th>
-            <th>Status</th>
-            <th>Method</th>
-            <th>Failure Reason</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <!-- HISTORY -->
-  <section class="card">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-      <b class="dim">SCAN HISTORY</b>
-      <button class="btn sm" id="btnClear">Clear</button>
-    </div>
-    <div id="hist"></div>
-  </section>
-
-</div>
-<div id="toast"></div>
-
-<script>
-'use strict';
-
-/* ═══════════════════════════════════════════════
-   CONSTANTS
-═══════════════════════════════════════════════ */
-const APP_VER       = 'v10 stable';
-const HIST_KEY      = 'vrt-history-v10';
-const CONCURRENCY   = 4;          // simultaneous files
-const BROWSER_TO    = 9000;       // ms — generous for large local files
-const MI_LOAD_TO    = 12000;      // ms — CDN script + WASM load budget
-const MI_FILE_TO    = 18000;      // ms — per-file MediaInfo analysis
-const MI_BASE       = 'https://cdn.jsdelivr.net/npm/mediainfo.js@0.1.7/dist/';
-
-/* video extensions → treat as candidates */
-const VID_EXT = new Set(
-  '3g2,3gp,asf,avi,divx,dv,f4v,flv,m2ts,m4v,m4b,m4p,mkv,mod,mov,mp4,mpe,mpeg,mpg,mts,mxf,ogm,ogv,rm,rmvb,tod,ts,vob,webm,wm,wmv'
-  .split(',')
-);
-
-/* extensions to always ignore (documents, images, audio, archives) */
-const IGN_EXT = new Set(
-  'pdf,txt,rtf,doc,docx,odt,pages,xls,xlsx,ods,csv,ppt,pptx,odp,key,json,xml,html,htm,md,' +
-  'zip,rar,7z,tar,gz,bz2,xz,iso,' +
-  'jpg,jpeg,png,gif,bmp,webp,svg,ico,tiff,tif,heic,heif,avif,' +
-  'mp3,aac,wav,flac,ogg,wma,m4a,aiff,opus,mid,midi,' +
-  'exe,dll,dmg,pkg,deb,rpm,msi,app,bat,sh,py,js,ts,css,php,rb,java,cpp,c,h,cs,go,rs,swift'
-  .split(',')
-);
-
-/* ═══════════════════════════════════════════════
-   UTILITY
-═══════════════════════════════════════════════ */
-const $ = id => document.getElementById(id);
-
-function getExt(file) {
-  const n = (file?.name || '').toLowerCase();
-  const i = n.lastIndexOf('.');
-  return (i > 0 && i < n.length - 1) ? n.slice(i + 1) : '';
-}
-
-function getPath(file) {
-  return file.webkitRelativePath || file.relativePath || file.name || '?';
-}
-
-function isCandidate(file) {
-  const e = getExt(file);
-  const m = (file.type || '').toLowerCase();
-  if (m.startsWith('video/') || VID_EXT.has(e)) return true;
-  if (IGN_EXT.has(e) || m.startsWith('image/') || m.startsWith('audio/') || m === 'application/pdf') return false;
-  /* unknown type/extension → include as candidate */
-  return !e || m === '' || m === 'application/octet-stream';
-}
-
-function fmtTC(x) {
-  if (!x || !isFinite(x) || x < 0) return '00:00:00';
-  const h = Math.floor(x / 3600);
-  const m = Math.floor(x % 3600 / 60);
-  const s = Math.floor(x % 60);
-  return `${pad(h)}:${pad(m)}:${pad(s)}`;
-}
-function pad(n) { return String(Math.floor(n)).padStart(2, '0'); }
-
-function fmtDur(s) {
-  if (!isFinite(s) || s < 0) return '';
-  s = Math.round(s);
-  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
-}
-
-function fmtSz(bytes) {
-  if (!bytes) return '—';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), 3);
-  return (bytes / 1024 ** i).toFixed(i ? 1 : 0) + '\u00a0' + units[i];
-}
-
-function esc(s) {
-  return String(s ?? '').replace(/[&<>"]/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])
-  );
-}
-
-let toastTimer;
-function toast(msg) {
-  const t = $('toast');
-  t.textContent = msg;
-  t.className = 'show';
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (t.className = ''), 3000);
-}
-
-/* ═══════════════════════════════════════════════
-   MEDIAINFO.JS — LAZY LOADER
-   Loads CDN script once; creates a fresh instance
-   per file so calls are never serialised.
-═══════════════════════════════════════════════ */
-let miScriptPromise = null;   // resolves to true/false
-let miScriptReady   = null;   // cached result after first load
-
-function loadMIScript() {
-  if (miScriptReady !== null) return Promise.resolve(miScriptReady);
-  if (miScriptPromise) return miScriptPromise;
-
-  miScriptPromise = new Promise(resolve => {
-    const s = document.createElement('script');
-    s.src = MI_BASE + 'mediainfo.min.js';
-    const timer = setTimeout(() => {
-      console.warn('[VRT] MediaInfo script load timed out');
-      miScriptReady = false;
-      resolve(false);
-    }, MI_LOAD_TO);
-    s.onload = () => {
-      clearTimeout(timer);
-      miScriptReady = true;
-      resolve(true);
-    };
-    s.onerror = () => {
-      clearTimeout(timer);
-      console.warn('[VRT] MediaInfo script failed to load from CDN');
-      miScriptReady = false;
-      resolve(false);
-    };
-    document.head.appendChild(s);
-  });
-
-  return miScriptPromise;
-}
-
-/**
- * Try to get duration via MediaInfo.js.
- * Creates a fresh instance per call — no shared mutable queue.
- * @returns {{ d: number|null, why: string }}
- */
-async function miDuration(file) {
-  /* 1. Ensure script is loaded */
-  const loaded = await loadMIScript();
-  if (!loaded) return { d: null, why: 'mi-load-failed' };
-
-  const factory = window.MediaInfo || window.MediaInfoFactory;
-  if (typeof factory !== 'function') return { d: null, why: 'mi-no-factory' };
-
-  /* 2. Create a fresh MediaInfo instance (WASM module is reused/cached by browser) */
-  let mi;
-  try {
-    mi = await Promise.race([
-      new Promise((resolve, reject) => {
-        try {
-          const opts = {
-            format: 'object',
-            locateFile: f => MI_BASE + f   // <── points WASM at jsDelivr CDN
-          };
-          /* v0.1.x: callback style; v0.2+: may return a Promise — handle both */
-          const ret = factory(opts, resolve, reject);
-          if (ret && typeof ret.then === 'function') ret.then(resolve).catch(reject);
-        } catch (e) { reject(e); }
-      }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('mi-init-timeout')), 8000)
-      )
-    ]);
-  } catch (e) {
-    return { d: null, why: `mi-init: ${e.message}` };
-  }
-
-  if (!mi || typeof mi.analyzeData !== 'function') {
-    return { d: null, why: 'mi-no-analyzeData' };
-  }
-
-  /* 3. Analyse the file with a per-file timeout */
-  try {
-let totalRead = 0;
-    const READ_BUDGET = 12 * 1024 * 1024; // 12 MB — enough for MP4/MKV/AVI/WMV headers
-
-    const result = await Promise.race([
-      mi.analyzeData(
-        () => file.size,
-        async (size, offset) => {
-          totalRead += size;
-          if (totalRead > READ_BUDGET) throw new Error('read-budget-exceeded');
-          return new Uint8Array(await file.slice(offset, offset + size).arrayBuffer());
-        }
-      ),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('mi-analysis-timeout')), MI_FILE_TO)
-      )
-    ]);
-
-    const d = parseMIResult(result);
-    return d !== null ? { d, why: '' } : { d: null, why: 'mi-no-duration-field' };
-  } catch (e) {
-    return { d: null, why: `mi-error: ${e.message}` };
-  } finally {
-    try { mi.close?.(); } catch { /* ignore */ }
-  }
-}
-
-function parseMIResult(raw) {
-  /* Handle both object and JSON-string outputs */
-  let data = raw;
-  if (typeof raw === 'string') {
-    try { data = JSON.parse(raw); } catch { return null; }
-  }
-  if (!data) return null;
-
-  const tracks = data?.media?.track;
-  if (!Array.isArray(tracks) || tracks.length === 0) return null;
-
-  /* Prefer the General track */
-  const general =
-    tracks.find(t => (t['@type'] || '').toLowerCase() === 'general') || tracks[0];
-  if (!general) return null;
-
-  /* MediaInfo returns Duration in milliseconds */
-  const rawDur = general.Duration;
-  if (rawDur != null) {
-    const ms = parseFloat(String(rawDur));
-    if (ms > 0 && isFinite(ms)) return ms / 1000;
-  }
-
-  /* Fallback: try time-string fields across all tracks */
-  for (const track of tracks) {
-    for (const key of ['Duration_String3', 'Duration/String3', 'Duration_String', 'Duration/String']) {
-      const val = track[key];
-      if (!val) continue;
-      const d = parseHMS(String(val));
-      if (d) return d;
-    }
-  }
-
-  return null;
-}
-
-function parseHMS(s) {
-  /* Matches "H:MM:SS", "H:MM:SS.mmm", "H:MM:SS,mmm" */
-  const m = s.trim().match(/^(\d+):(\d{1,2}):(\d{2})(?:[.,](\d+))?$/);
-  if (!m) return null;
-  const d = +m[1] * 3600 + +m[2] * 60 + +m[3] + (m[4] ? +('0.' + m[4]) : 0);
-  return d > 0 ? d : null;
-}
-
-/* ═══════════════════════════════════════════════
-   BROWSER VIDEO-ELEMENT DURATION
-   Fast-fails via onerror for unsupported codecs.
-═══════════════════════════════════════════════ */
-function browserDuration(file) {
-  return new Promise(resolve => {
-    const url = URL.createObjectURL(file);
-    const v   = document.createElement('video');
-    v.preload    = 'metadata';
-    v.muted      = true;
-    v.playsInline = true;
-
-    let done = false;
-    const finish = (d, why) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      v.onloadedmetadata = v.ondurationchange = v.onerror = null;
-      try { v.removeAttribute('src'); v.load(); } catch { /* ignore */ }
-      URL.revokeObjectURL(url);
-      resolve({ d, why });
-    };
-
-    const checkDuration = () => {
-      const d = v.duration;
-      if (d && isFinite(d) && d > 0) finish(d, '');
-    };
-
-    /* onerror fires instantly for unsupported codecs — fast-fail to MediaInfo */
-    v.onerror = () => {
-      const code = v.error?.code;
-      const labels = { 1: 'aborted', 2: 'network', 3: 'decode-error', 4: 'src-not-supported' };
-      finish(null, `browser-error(${labels[code] || code || '?'})`);
-    };
-
-    v.onloadedmetadata = checkDuration;
-    v.ondurationchange = checkDuration;
-
-    /* Safety timeout — only fires if browser neither errors nor fires loadedmetadata */
-    const timer = setTimeout(
-      () => finish(null, 'browser-timeout'),
-      BROWSER_TO
-    );
-
-    v.src = url;
-    v.load();
-  });
-}
-
-/* ═══════════════════════════════════════════════
-   COMBINED DURATION: browser first, then MediaInfo
-═══════════════════════════════════════════════ */
-async function getFileDuration(file) {
-  /* Phase 1 — native browser (fast for MP4/WebM; fast-fail for WMV/AVI/etc.) */
-  const b = await browserDuration(file);
-  if (b.d !== null) {
-    return { duration: b.d, ok: true, method: 'native', why: '' };
-  }
-
-  /* Phase 2 — MediaInfo.js (handles WMV, AVI, MKV variants, RM, etc.) */
-  const m = await miDuration(file);
-  if (m.d !== null) {
-    return { duration: m.d, ok: true, method: 'mediainfo', why: '' };
-  }
-
-  /* Both failed */
-  const why = b.why + (m.why ? ' → ' + m.why : '');
-  return { duration: 0, ok: false, method: 'failed', why };
-}
-
-/* ═══════════════════════════════════════════════
-   FOLDER COLLECTION  (recursive)
-═══════════════════════════════════════════════ */
-async function collectFromHandle(handle, disc) {
-  const files = [];
-  for await (const [, entry] of handle.entries()) {
-    try {
-      if (entry.kind === 'file') {
-        const f = await entry.getFile();
-        disc.total++;
-        if (isCandidate(f)) files.push(f);
-        else disc.ignored++;
-      } else if (entry.kind === 'directory') {
-        files.push(...await collectFromHandle(entry, disc));
-      }
-    } catch {
-      disc.ignored++;
-    }
-  }
-  return files;
-}
-
-function collectFromEntry(entry, disc) {
-  return new Promise(resolve => {
-    if (!entry) return resolve([]);
-
-    if (entry.isFile) {
-      entry.file(
-        f => { disc.total++; isCandidate(f) ? resolve([f]) : (disc.ignored++, resolve([])); },
-        () => { disc.ignored++; resolve([]); }
-      );
-      return;
-    }
-
-    if (!entry.isDirectory) return resolve([]);
-
-    const reader  = entry.createReader();
-    const allSubs = [];
-    (function readBatch() {
-      reader.readEntries(async batch => {
-        if (!batch.length) {
-          const nested = await Promise.all(allSubs.map(e => collectFromEntry(e, disc)));
-          resolve(nested.flat());
-        } else {
-          allSubs.push(...batch);
-          readBatch();
-        }
-      }, () => resolve([]));
-    })();
-  });
-}
-
-/* ═══════════════════════════════════════════════
-   SCAN STATE
-═══════════════════════════════════════════════ */
-const S = { running: false, cancel: false, result: null };
-
-async function runScan(files, folderName, disc) {
-  if (S.running) return;
-  if (!files.length) { toast('No video candidates found in that folder.'); return; }
-
-  S.running = true;
-  S.cancel  = false;
-  S.result  = null;
-
-  /* Preload MediaInfo in background while browser handles first files */
-  loadMIScript().then(ok => {
-    $('miStatus').textContent = ok
-      ? '✓ MediaInfo ready (fallback for unsupported codecs)'
-      : '⚠ MediaInfo unavailable — only browser-native formats will succeed';
-  });
-
-  const t0 = Date.now();
-  $('scan').hidden    = false;
-  $('results').hidden = true;
-  $('folder').textContent  = folderName;
-  $('fill').style.width    = '0%';
-  $('fill').classList.remove('done');
-  $('count').textContent = `0 / ${files.length}`;
-  $('eta').textContent   = '';
-  $('scanFile').textContent =
-    `${disc.total} total files · ${files.length} video candidates · ${disc.ignored} ignored`;
-  scrollTo({ top: $('scan').offsetTop - 20, behavior: 'smooth' });
-
-  /* ── Concurrent workers ── */
-  const results = [];
-  let nextIdx   = 0;
-  let doneCount = 0;
-
-  async function worker() {
-    while (!S.cancel && nextIdx < files.length) {
-      const i    = nextIdx++;
-      const file = files[i];
-
-      $('scanFile').textContent = file.name;
-
-      const r = await getFileDuration(file);
-
-      results.push({
-        name:     file.name,
-        path:     getPath(file),
-        ext:      getExt(file),
-        size:     file.size || 0,
-        duration: r.duration,
-        ok:       r.ok,
-        method:   r.method,
-        why:      r.why
-      });
-
-      doneCount++;
-      const elapsed = Math.max(0.001, (Date.now() - t0) / 1000);
-      const eta     = Math.round((files.length - doneCount) / (doneCount / elapsed));
-
-      $('fill').style.width    = Math.round(doneCount / files.length * 100) + '%';
-      $('count').textContent   = `${doneCount} / ${files.length}`;
-      $('eta').textContent     = doneCount < files.length
-        ? `ETA ${fmtDur(eta)}`
-        : `Done in ${fmtDur(Math.round(elapsed))}`;
-    }
-  }
-
-  const slots = Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker);
-  await Promise.all(slots);
-
-  S.running = false;
-
-  if (S.cancel) {
-    $('scan').hidden = true;
-    toast('Scan cancelled.');
-    return;
-  }
-
-  const elapsed    = Math.round((Date.now() - t0) / 1000);
-  const totalSecs  = results.reduce((s, r) => s + (r.ok ? r.duration : 0), 0);
-  const succeeded  = results.filter(r => r.ok).length;
-  const failed     = results.filter(r => !r.ok).length;
-
-  S.result = {
-    id:            'scan_' + Date.now(),
-    folderName,
-    timestamp:     Date.now(),
-    totalDuration: totalSecs,
-    totalFiles:    disc.total,
-    candidates:    files.length,
-    ignored:       disc.ignored,
-    succeeded,
-    failed,
-    elapsed,
-    files:         results
-  };
-
-  $('fill').classList.add('done');
-  $('fill').style.width = '100%';
-  renderResults();
-}
-
-/* ═══════════════════════════════════════════════
-   RENDER RESULTS
-═══════════════════════════════════════════════ */
-function renderResults() {
-  const r = S.result;
-  $('scan').hidden    = true;
-  $('results').hidden = false;
-
-  /* Big total */
-  $('total').textContent = fmtTC(r.totalDuration);
-  $('sub').textContent   = `${r.folderName} · scanned ${fmtDur(r.elapsed)}`;
-
-  /* Stats strip */
-  $('stTotal').textContent = r.totalFiles;
-  $('stCand').textContent  = r.candidates;
-  $('stIgn').textContent   = r.ignored;
-  $('stOk').textContent    = r.succeeded;
-  $('stFail').textContent  = r.failed;
-  $('stTime').textContent  = fmtDur(r.elapsed);
-
-  /* Notice */
-  $('notice').innerHTML = r.failed
-    ? `<div class="warn">⚠ ${r.failed} file(s) failed — see the Failure Reason column below.</div>`
-    : `<div class="ok-msg">✓ All ${r.succeeded} video durations read successfully.</div>`;
-
-  /* Per-file table */
-  const sorted = [...r.files].sort((a, b) => a.name.localeCompare(b.name));
-  $('tbody').innerHTML = sorted.map(f => `
-    <tr>
-      <td class="filename" title="${esc(f.path)}">${esc(f.name)}</td>
-      <td class="mono dim">.${esc(f.ext)}</td>
-      <td class="r dim">${fmtSz(f.size)}</td>
-      <td class="dur ${f.ok ? '' : 'fail'}">${f.ok ? fmtTC(f.duration) : '—'}</td>
-      <td class="${f.ok ? 'ok-cell' : 'fail'}">${f.ok ? 'ok' : 'failed'}</td>
-      <td class="dim">${esc(f.method)}</td>
-      <td class="sm dim">${esc(f.why)}</td>
-    </tr>`).join('');
-
-  scrollTo({ top: $('results').offsetTop - 20, behavior: 'smooth' });
-}
-
-/* ═══════════════════════════════════════════════
-   HISTORY
-═══════════════════════════════════════════════ */
-function getHistory() {
-  try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); }
-  catch { return []; }
-}
-
-function saveToHistory() {
-  if (!S.result) return;
-  const { id, folderName, timestamp, totalDuration, candidates, succeeded, failed, elapsed } = S.result;
-  const h = getHistory();
-  if (!h.find(x => x.id === id)) {
-    h.unshift({ id, folderName, timestamp, totalDuration, candidates, succeeded, failed, elapsed });
-    localStorage.setItem(HIST_KEY, JSON.stringify(h.slice(0, 30)));
-  }
-  renderHistory();
-  toast('Saved to history.');
-}
-
-function renderHistory() {
-  const h = getHistory();
-  $('hist').innerHTML = h.length
-    ? h.map(s => `
-        <div class="hist-row">
+  <main id="mainContent">
+
+    <!-- ══════════════════════════════════════════
+         HOME SCREEN
+         ══════════════════════════════════════════ -->
+    <section id="homeScreen" class="screen active" aria-labelledby="dashboardTitle">
+
+      <!-- Hero -->
+      <section class="study-hero">
+        <p class="eyebrow">Vocabulary flashcards</p>
+        <h1 id="dashboardTitle">Choose a deck</h1>
+        <p id="statusBox">Loading data…</p>
+        <div class="master-row" aria-label="Overall mastery">
+          <span>Overall</span>
+          <div class="master-track"><i id="overallMasterBar"></i></div>
+          <b id="heroMastery">0%</b>
+        </div>
+        <p class="sub-status" id="heroSubStatus">Preparing your quiz boxes.</p>
+      </section>
+
+      <!-- Search + CTA -->
+      <section class="quick-panel" aria-label="Quick controls">
+        <div class="search-wrap">
+          <label for="searchInput">Search decks</label>
+          <input id="searchInput" type="search" placeholder="OWS, Idioms…" autocomplete="off">
+        </div>
+        <button class="primary-action" type="button" data-action="first-ready">
+          Practice due →
+        </button>
+      </section>
+
+      <!-- Stats strip -->
+      <div class="stats-strip" id="overallStats" aria-label="Overall progress"></div>
+
+      <!-- Deck grid -->
+      <div class="deck-list" id="categoryGrid" aria-label="Practice decks"></div>
+
+      <!-- Settings -->
+      <section class="settings-panel" id="settingsPanel" aria-labelledby="settingsTitle">
+        <div class="settings-title-row">
           <div>
-            <b>${esc(s.folderName)}</b>
-            <p class="dim">${s.candidates} candidates · ${s.succeeded} ok${s.failed ? ` · ${s.failed} failed` : ''} · ${new Date(s.timestamp).toLocaleString()}</p>
+            <p class="eyebrow">Study setup</p>
+            <h2 id="settingsTitle">Session options</h2>
           </div>
-          <b class="dur">${fmtTC(s.totalDuration)}</b>
-        </div>`).join('')
-    : '<p class="dim" style="margin-top:8px">No scans saved yet.</p>';
-}
+          <label class="select-pill" for="studyMode">
+            <span>Mode</span>
+            <select id="studyMode">
+              <option value="smart">Smart</option>
+              <option value="instant">Instant</option>
+            </select>
+          </label>
+        </div>
 
-/* ═══════════════════════════════════════════════
-   CSV EXPORT
-═══════════════════════════════════════════════ */
-function exportCSV() {
-  const r = S.result;
-  if (!r) return;
+        <div class="settings-grid">
+          <label class="toggle-line">
+            <input type="checkbox" id="includeMastered">
+            <span class="toggle-ui"></span>
+            <b>Include mastered</b>
+          </label>
+          <label class="toggle-line">
+            <input type="checkbox" id="weakOnly">
+            <span class="toggle-ui"></span>
+            <b>Weak only</b>
+          </label>
+          <label class="toggle-line">
+            <input type="checkbox" id="unlearnedOnly">
+            <span class="toggle-ui"></span>
+            <b>New only</b>
+          </label>
+        </div>
 
-  const header = [
-    'Filename', 'Extension', 'Size (bytes)',
-    'Duration (seconds)', 'Duration (H:MM:SS)',
-    'Status', 'Method', 'Failure Reason'
-  ];
-  const rows = r.files.map(f => [
-    f.name,
-    f.ext,
-    f.size,
-    f.ok ? f.duration.toFixed(3) : '',
-    f.ok ? fmtTC(f.duration) : '',
-    f.ok ? 'ok' : 'failed',
-    f.method,
-    f.why || ''
-  ]);
+        <p class="shortcut-note">
+          Keys: <kbd>1</kbd>–<kbd>4</kbd> answer &nbsp;·&nbsp;
+          <kbd>S</kbd> pass &nbsp;·&nbsp;
+          <kbd>Enter</kbd> next &nbsp;·&nbsp;
+          <kbd>Esc</kbd> decks
+        </p>
+      </section>
 
-  const csv = [header, ...rows]
-    .map(row => row.map(c => '"' + String(c ?? '').replace(/"/g, '""') + '"').join(','))
-    .join('\n');
+    </section><!-- /homeScreen -->
 
-  const a  = document.createElement('a');
-  a.href   = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-  a.download = `${r.folderName}_runtime_v10.csv`;
-  a.click();
-}
+    <!-- ══════════════════════════════════════════
+         QUIZ SCREEN
+         ══════════════════════════════════════════ -->
+    <section id="quizScreen" class="screen" aria-label="Quiz">
 
-/* ═══════════════════════════════════════════════
-   COPY SUMMARY
-═══════════════════════════════════════════════ */
-async function copySummary() {
-  const r = S.result;
-  if (!r) return;
-  const text = [
-    `Video Runtime Tracker — ${APP_VER}`,
-    `Folder:    ${r.folderName}`,
-    `Runtime:   ${fmtTC(r.totalDuration)}`,
-    `Candidates:${r.candidates}`,
-    `Succeeded: ${r.succeeded}`,
-    `Failed:    ${r.failed}`,
-    `Scan time: ${fmtDur(r.elapsed)}`
-  ].join('\n');
-  try {
-    await navigator.clipboard.writeText(text);
-    toast('Copied to clipboard.');
-  } catch {
-    toast('Copy failed — try a different browser.');
-  }
-}
+      <div class="quiz-header">
+        <button class="back-link" id="backBtn" type="button">← Decks</button>
+        <div>
+          <span id="quizCategory">Quiz</span>
+          <span id="quizCount">0 attempted · 0 correct</span>
+        </div>
+      </div>
 
-/* ═══════════════════════════════════════════════
-   FOLDER PICKER HANDLERS
-═══════════════════════════════════════════════ */
-$('btnChoose').onclick = async () => {
-  if (S.running) return;
-  if (!window.showDirectoryPicker) { $('legacy').click(); return; }
-  try {
-    const handle = await showDirectoryPicker({ mode: 'read' });
-    const disc   = { total: 0, ignored: 0 };
-    const files  = await collectFromHandle(handle, disc);
-    await runScan(files, handle.name || 'Selected Folder', disc);
-  } catch (e) {
-    if (e.name !== 'AbortError') toast('Could not open folder: ' + e.message);
-  }
-};
+      <article class="flashcard">
 
-$('legacy').onchange = async e => {
-  if (S.running) return;
-  const all   = [...(e.target.files || [])];
-  const files = all.filter(isCandidate);
-  const name  = all[0]?.webkitRelativePath?.split('/')[0] || 'Selected Folder';
-  const disc  = { total: all.length, ignored: all.length - files.length };
-  e.target.value = '';
-  await runScan(files, name, disc);
-};
+        <!-- progress bar -->
+        <div class="progress-line" aria-hidden="true">
+          <span id="progressLine"></span>
+        </div>
 
-/* ── drag & drop ── */
-const dropZone = $('drop');
-['dragenter', 'dragover'].forEach(evt =>
-  dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.add('drop-active'); })
-);
-['dragleave', 'dragend', 'drop'].forEach(evt =>
-  dropZone.addEventListener(evt, () => dropZone.classList.remove('drop-active'))
-);
-dropZone.ondrop = async e => {
-  e.preventDefault();
-  if (S.running) return;
-  const items = [...(e.dataTransfer?.items || [])];
-  const disc  = { total: 0, ignored: 0 };
-  try {
-    /* Modern File System Access API */
-    if (items[0]?.getAsFileSystemHandle) {
-      const h = await items[0].getAsFileSystemHandle();
-      if (h.kind === 'directory') {
-        const files = await collectFromHandle(h, disc);
-        await runScan(files, h.name || 'Dropped Folder', disc);
-        return;
-      }
-    }
-    /* Legacy webkitGetAsEntry */
-    const entry = items[0]?.webkitGetAsEntry?.();
-    if (entry?.isDirectory) {
-      const files = await collectFromEntry(entry, disc);
-      await runScan(files, entry.name || 'Dropped Folder', disc);
-    } else {
-      toast('Please drop a folder, not individual files.');
-    }
-  } catch (err) {
-    toast('Could not read the dropped folder: ' + err.message);
-  }
-};
+        <!-- label + score -->
+        <div class="flash-meta">
+          <p class="eyebrow" id="promptLabel">Choose the answer</p>
+          <span id="questionScore" class="score-chip">Score 0 / 5</span>
+        </div>
 
-/* ── other buttons ── */
-$('btnCancel').onclick = () => { S.cancel = true; };
-$('btnNew').onclick    = () => {
-  $('results').hidden = true;
-  $('scan').hidden    = true;
-  scrollTo({ top: 0, behavior: 'smooth' });
-};
-$('btnSave').onclick   = saveToHistory;
-$('btnCSV').onclick    = exportCSV;
-$('btnCopy').onclick   = copySummary;
-$('btnClear').onclick  = () => { localStorage.removeItem(HIST_KEY); renderHistory(); };
+        <!-- question -->
+        <h2 id="questionText">Loading…</h2>
 
-/* ═══════════════════════════════════════════════
-   STARTUP — clear stale caches then register fresh SW
-═══════════════════════════════════════════════ */
-(async () => {
-  /* 1. Delete all old VRT service-worker caches */
-  if ('caches' in window) {
-    try {
-      const keys = await caches.keys();
-      await Promise.all(
-        keys.filter(k => k.startsWith('vrt-') && k !== 'vrt-v10')
-            .map(k => caches.delete(k))
-      );
-    } catch { /* ignore — private browsing */ }
-  }
+        <!-- options injected by app.js -->
+        <div id="optionGrid" class="option-list" role="group" aria-labelledby="questionText"></div>
 
-  /* 2. Unregister old service workers so stale pages stop being served */
-  if ('serviceWorker' in navigator) {
-    try {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.unregister()));
-    } catch { /* ignore */ }
-    /* 3. Register fresh v10 service worker */
-    window.addEventListener('load', () =>
-      navigator.serviceWorker.register('./sw.js').catch(() => {})
-    );
-  }
-})();
+        <!-- feedback -->
+        <div id="feedbackBox" class="feedback-box hidden" role="alert"></div>
 
-/* ── browser support hint ── */
-$('note').textContent = window.showDirectoryPicker
-  ? 'Chrome / Edge: full folder picker with re-scan support.'
-  : 'Firefox / Safari: use Legacy Picker — all features work, except re-scan.';
+        <!-- controls -->
+        <div class="session-controls">
+          <button id="passBtn"   class="secondary-action" type="button">Pass</button>
+          <button id="finishBtn" class="secondary-action" type="button">Finish</button>
+          <button id="nextBtn"   class="next-action hidden" type="button">Continue →</button>
+        </div>
 
-/* ── initial history render ── */
-renderHistory();
-</script>
+      </article>
+
+    </section><!-- /quizScreen -->
+
+  </main>
+</div><!-- /phone-shell -->
+
 </body>
 </html>
